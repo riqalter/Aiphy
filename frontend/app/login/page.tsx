@@ -9,6 +9,7 @@ export default function LoginPage() {
   const router = useRouter();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [role, setRole] = useState<"learner" | "admin">("learner");
   const [loading, setLoading] = useState(false);
 
   const handleLogin = (e: React.FormEvent) => {
@@ -17,7 +18,11 @@ export default function LoginPage() {
     // Simulate successful login authentication
     setTimeout(() => {
       setLoading(false);
-      router.push("/");
+      if (role === "admin") {
+        router.push("/admin");
+      } else {
+        router.push("/dashboard");
+      }
     }, 1500);
   };
 
@@ -27,7 +32,7 @@ export default function LoginPage() {
       <div className="flex flex-1 flex-col justify-center px-4 py-12 sm:px-6 lg:flex-none lg:px-20 xl:px-24 bg-white dark:bg-slate-900/50">
         <div className="mx-auto w-full max-w-sm lg:w-96">
           <div>
-            <Link href="/landing" className="flex items-center gap-2 text-lg font-bold tracking-wider text-[#1E216B] dark:text-indigo-400">
+            <Link href="/" className="flex items-center gap-2 text-lg font-bold tracking-wider text-[#1E216B] dark:text-indigo-400">
               <Sparkles className="h-5 w-5 text-indigo-600 dark:text-indigo-400" />
               <span>AIphy</span>
             </Link>
@@ -42,17 +47,43 @@ export default function LoginPage() {
             </p>
           </div>
 
-          <div className="mt-8">
+          {/* Role Selector Tabs */}
+          <div className="mt-6 grid grid-cols-2 gap-2 rounded-xl bg-slate-100 p-1 dark:bg-slate-800">
+            <button
+              type="button"
+              onClick={() => setRole("learner")}
+              className={`rounded-lg py-2.5 text-center text-xs font-bold transition-all ${
+                role === "learner"
+                  ? "bg-white text-indigo-600 shadow-sm dark:bg-slate-900 dark:text-indigo-400"
+                  : "text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white"
+              }`}
+            >
+              Learner
+            </button>
+            <button
+              type="button"
+              onClick={() => setRole("admin")}
+              className={`rounded-lg py-2.5 text-center text-xs font-bold transition-all ${
+                role === "admin"
+                  ? "bg-white text-indigo-600 shadow-sm dark:bg-slate-900 dark:text-indigo-400"
+                  : "text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white"
+              }`}
+            >
+              Administrator
+            </button>
+          </div>
+
+          <div className="mt-6">
             {/* Social Logins */}
             <div className="grid grid-cols-2 gap-3">
               <button
-                onClick={() => router.push("/")}
+                onClick={() => router.push(role === "admin" ? "/admin" : "/dashboard")}
                 className="flex items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white py-2.5 text-xs font-semibold text-slate-700 hover:bg-slate-50 dark:border-slate-800 dark:bg-slate-950 dark:text-slate-300"
               >
                 <span>🌐</span> Google
               </button>
               <button
-                onClick={() => router.push("/")}
+                onClick={() => router.push(role === "admin" ? "/admin" : "/dashboard")}
                 className="flex items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white py-2.5 text-xs font-semibold text-slate-700 hover:bg-slate-50 dark:border-slate-800 dark:bg-slate-950 dark:text-slate-300"
               >
                 <svg className="h-4 w-4 text-slate-800 dark:text-slate-205" viewBox="0 0 24 24" fill="currentColor">
@@ -123,7 +154,7 @@ export default function LoginPage() {
                 disabled={loading}
                 className="flex w-full items-center justify-center gap-2 rounded-2xl bg-indigo-600 py-3.5 text-xs font-bold text-white hover:bg-indigo-500 transition shadow-md shadow-indigo-600/10 disabled:opacity-70"
               >
-                {loading ? "Menghubungkan..." : "Masuk ke Platform"}
+                {loading ? "Menghubungkan..." : `Masuk sebagai ${role === "admin" ? "Admin" : "Learner"}`}
                 <ArrowRight className="h-4 w-4" />
               </button>
             </form>

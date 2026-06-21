@@ -16,7 +16,7 @@ export default function Sidebar() {
   const pathname = usePathname();
 
   const menuItems = [
-    { name: "Dashboard", href: "/", icon: LayoutDashboard },
+    { name: "Dashboard", href: "/dashboard", icon: LayoutDashboard },
     { name: "My Course", href: "/my-course", icon: GraduationCap },
     { name: "All Courses", href: "/all-courses", icon: BookOpen },
     { name: "AI Chat", href: "/ai-chat", icon: MessageSquare },
