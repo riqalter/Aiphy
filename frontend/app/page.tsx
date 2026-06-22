@@ -1,25 +1,48 @@
 "use client";
 
 import Link from "next/link";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Sparkles, ArrowRight, Check, HelpCircle, Mail, Phone, MapPin, ChevronDown } from "lucide-react";
+import { api } from "./lib/api";
 
 export default function LandingPage() {
   const [activeFaq, setActiveFaq] = useState<number | null>(null);
   const [contactForm, setContactForm] = useState({ name: "", email: "", message: "" });
   const [formSubmitted, setFormSubmitted] = useState(false);
+  const [faqs, setFaqs] = useState<any[]>([]);
+
+  useEffect(() => {
+    async function loadFaqs() {
+      try {
+        const res = await api.get("/api/help/faqs");
+        if (res.data && res.data.length > 0) {
+          setFaqs(res.data.slice(0, 3).map((f: any) => ({ q: f.question, a: f.answer }))); // Display top 3 FAQs
+        } else {
+          setFaqs(defaultFaqs);
+        }
+      } catch {
+        setFaqs(defaultFaqs);
+      }
+    }
+    loadFaqs();
+  }, []);
 
   const toggleFaq = (index: number) => {
     setActiveFaq(activeFaq === index ? null : index);
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setFormSubmitted(true);
-    setTimeout(() => {
+    try {
+      await api.post("/api/contact", contactForm);
+      alert("Pesan kemitraan Anda telah dikirim! Tim kami akan segera menghubungi Anda.");
       setContactForm({ name: "", email: "", message: "" });
+    } catch (err: any) {
+      alert("Gagal mengirim pesan: " + err.message);
+    } finally {
       setFormSubmitted(false);
-    }, 3000);
+    }
   };
 
   const pricingFeatures = {
@@ -27,7 +50,7 @@ export default function LandingPage() {
     pro: ["Akses Semua Modul AI", "Akses Tutor AI Tanpa Batas", "Sertifikat Penyelesaian", "Grup Premium Instruktur", "Latihan & Evaluasi Koding Otomatis"]
   };
 
-  const faqs = [
+  const defaultFaqs = [
     { q: "Apakah platform ini cocok untuk pemula?", a: "Ya! Kurikulum AIphy dirancang berjenjang dari tingkat fundamental hingga tingkat mahir agar pemula tanpa latar belakang koding pun dapat memahaminya." },
     { q: "Bagaimana cara kerja AI Assistant (Tutor Virtual)?", a: "AI Assistant kami menggunakan teknologi LLM (Large Language Model) adaptif untuk menyederhanakan bahasa teknis dan memberikan umpan balik langsung pada tugas pemrograman Anda." },
     { q: "Bagaimana sistem pembayarannya?", a: "Kami menyediakan paket dasar gratis dan paket Pro berlangganan bulanan melalui transfer bank atau e-wallet." }

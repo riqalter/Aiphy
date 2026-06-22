@@ -1,72 +1,43 @@
 "use client";
-
 import Sidebar from "@/components/sidebar";
 import Header from "@/components/header";
 import CourseCard from "@/components/course-card";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import Link from "next/link";
+import { api } from "../lib/api";
 
 export default function AllCoursesPage() {
   const [activeTab, setActiveTab] = useState("all");
+  const [courses, setCourses] = useState<any[]>([]);
+  const [profile, setProfile] = useState<any>(null);
+  const [loading, setLoading] = useState(true);
 
-  const courses = [
-    {
-      id: 1,
-      category: "Machine Learning",
-      title: "Basic Machine Learning Algorithm",
-      level: "Beginner",
-      chaptersCount: 10,
-      rating: 4.5,
-      enrolledStudentsCount: "10.7k",
-      duration: "17h 50min",
-      price: "Rp520.000",
-      originalPrice: "Rp720.000",
-      type: "fundamental"
-    },
-    {
-      id: 2,
-      category: "Deep Learning",
-      title: "Neural Networks & Deep Learning Fundamental",
-      level: "Intermediate",
-      chaptersCount: 12,
-      rating: 4.8,
-      enrolledStudentsCount: "5.4k",
-      duration: "20h 15min",
-      price: "Rp650.000",
-      originalPrice: "Rp850.000",
-      type: "intermediate"
-    },
-    {
-      id: 3,
-      category: "Generative AI",
-      title: "Prompt Engineering & LLM Customization",
-      level: "Advanced",
-      chaptersCount: 8,
-      rating: 4.9,
-      enrolledStudentsCount: "3.2k",
-      duration: "12h 40min",
-      price: "Rp750.000",
-      originalPrice: "Rp990.000",
-      type: "advanced"
-    },
-    {
-      id: 4,
-      category: "Mathematics for AI",
-      title: "Linear Algebra & Statistics for Data Science",
-      level: "Beginner",
-      chaptersCount: 15,
-      rating: 4.6,
-      enrolledStudentsCount: "8.1k",
-      duration: "22h 30min",
-      price: "Rp450.000",
-      originalPrice: "Rp600.000",
-      type: "fundamental"
+  useEffect(() => {
+    async function loadData() {
+      try {
+        const [coursesRes, profileRes] = await Promise.all([
+          api.get("/api/courses"),
+          api.get("/api/user/profile").catch(() => null)
+        ]);
+        setCourses(coursesRes.data || []);
+        if (profileRes) {
+          setProfile(profileRes.data);
+        }
+      } catch (err) {
+        console.error("Gagal memuat katalog kursus:", err);
+      } finally {
+        setLoading(false);
+      }
     }
-  ];
+    loadData();
+  }, []);
 
-  const filteredCourses = activeTab === "all" 
-    ? courses 
-    : courses.filter(c => c.type === activeTab);
+  const filteredCourses = activeTab === "all"
+    ? courses
+    : courses.filter(c => {
+        const mappedLevel = c.level === "beginner" ? "fundamental" : c.level;
+        return mappedLevel === activeTab;
+      });
 
   const tabs = [
     { id: "all", name: "Semua Modul" },
@@ -75,12 +46,23 @@ export default function AllCoursesPage() {
     { id: "advanced", name: "Mahir (Advanced)" }
   ];
 
+  if (loading) {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-slate-50 dark:bg-slate-950">
+        <div className="text-center">
+          <div className="h-12 w-12 animate-spin rounded-full border-4 border-indigo-600 border-t-transparent mx-auto dark:border-indigo-400"></div>
+          <p className="mt-4 text-xs font-semibold text-slate-500 dark:text-slate-400">Memuat Katalog...</p>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="min-h-screen bg-[#F8FAFC] pl-20 dark:bg-slate-950">
       <Sidebar />
 
       <main className="mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8">
-        <Header userName="Nadya Najelina" userTitle="Pilih kurikulum AI terstruktur yang sesuai dengan level Anda." />
+        <Header userName={profile?.name || "Learner"} userTitle="Pilih kurikulum AI terstruktur yang sesuai dengan level Anda." />
 
         {/* Filter Navigation Tabs */}
         <div className="mt-6 flex flex-wrap items-center gap-2 border-b border-slate-200 pb-4 dark:border-slate-800">
@@ -101,24 +83,28 @@ export default function AllCoursesPage() {
 
         {/* Courses Listing Grid */}
         <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3 mt-8">
-          {filteredCourses.map((course) => (
-            <Link key={course.id} href={`/courses/${course.id}`}>
-              <div className="h-full cursor-pointer hover:-translate-y-1 transition-transform">
-                <CourseCard
-                  type="recommendation"
-                  category={course.category}
-                  title={course.title}
-                  level={course.level}
-                  chaptersCount={course.chaptersCount}
-                  rating={course.rating}
-                  enrolledStudentsCount={course.enrolledStudentsCount}
-                  duration={course.duration}
-                  price={course.price}
-                  originalPrice={course.originalPrice}
-                />
-              </div>
-            </Link>
-          ))}
+          {filteredCourses.length > 0 ? (
+            filteredCourses.map((course) => (
+              <Link key={course.id} href={`/courses/${course.id}`}>
+                <div className="h-full cursor-pointer hover:-translate-y-1 transition-transform">
+                  <CourseCard
+                    type="recommendation"
+                    category={course.category}
+                    title={course.title}
+                    level={course.level === "beginner" ? "Beginner" : course.level === "intermediate" ? "Intermediate" : "Advanced"}
+                    chaptersCount={5} // Mock chapters count
+                    rating={4.8} // Mock rating
+                    enrolledStudentsCount="150+ siswa"
+                    duration="8 jam"
+                    price={course.price === 0 ? "Gratis" : `Rp ${course.price.toLocaleString()}`}
+                    originalPrice={course.originalPrice > 0 ? `Rp ${course.originalPrice.toLocaleString()}` : undefined}
+                  />
+                </div>
+              </Link>
+            ))
+          ) : (
+            <p className="col-span-full text-center text-xs font-semibold text-slate-400 py-12">Tidak ada kelas dalam kategori ini.</p>
+          )}
         </div>
       </main>
     </div>

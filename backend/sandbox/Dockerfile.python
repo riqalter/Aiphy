@@ -1,0 +1,25 @@
+FROM python:3.12-slim
+
+# Create sandbox user and group to run untrusted code securely
+RUN groupadd -r sandbox && useradd -r -g sandbox -d /home/sandbox -m sandbox
+
+# Install build dependencies for scientific python libraries (if compilation is needed)
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    gcc \
+    libc-dev \
+    && rm -rf /var/lib/apt/lists/*
+
+# Set up matplotlib backend to Agg (headless mode, prevents crashes when plotting)
+ENV MPLBACKEND=Agg
+ENV PYTHONUNBUFFERED=1
+
+# Install required data science packages
+RUN pip install --no-cache-dir numpy pandas matplotlib scikit-learn
+
+# Create workspace directories and grant permissions
+RUN mkdir -p /workspace && chown -R sandbox:sandbox /workspace
+
+USER sandbox
+WORKDIR /workspace
+
+CMD ["python3"]

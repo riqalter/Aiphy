@@ -3,7 +3,8 @@
 import { Search, ShoppingBag, Bell, ChevronDown, User, LogOut, Settings, Sparkles, AlertCircle } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useState } from "react";
+import { useState, useEffect } from "react";
+import { getCurrentUser, clearTokens } from "@/app/lib/api";
 
 interface HeaderProps {
   userName?: string;
@@ -11,13 +12,31 @@ interface HeaderProps {
 }
 
 export default function Header({ 
-  userName = "Nadya Najelina", 
+  userName, 
   userTitle = "Track your progress, activity, and performance." 
 }: HeaderProps) {
   const router = useRouter();
   const [showProfile, setShowProfile] = useState(false);
   const [showNotif, setShowNotif] = useState(false);
   const [showCart, setShowCart] = useState(false);
+  const [profile, setProfile] = useState<any>(null);
+
+  useEffect(() => {
+    setProfile(getCurrentUser());
+  }, []);
+
+  const displayUserName = userName || profile?.name || "Learner";
+
+  const getInitials = (name: string) => {
+    if (!name) return "L";
+    const parts = name.trim().split(/\s+/);
+    if (parts.length >= 2) {
+      return (parts[0][0] + parts[1][0]).toUpperCase();
+    }
+    return parts[0].substring(0, 2).toUpperCase();
+  };
+
+  const initials = getInitials(displayUserName);
 
   const mockNotifications = [
     { id: 1, text: "🔥 Streak belajar Anda mencapai 5 hari! Pertahankan!", time: "2 jam yang lalu" },
@@ -124,7 +143,7 @@ export default function Header({
             >
               <div className="relative h-9 w-9 overflow-hidden rounded-xl bg-slate-200">
                 <div className="flex h-full w-full items-center justify-center bg-indigo-100 text-sm font-bold text-indigo-700 dark:bg-indigo-900 dark:text-indigo-300">
-                  NN
+                  {initials}
                 </div>
               </div>
               <ChevronDown className="h-4 w-4 text-slate-500" />
@@ -144,6 +163,7 @@ export default function Header({
                 <button
                   onClick={() => {
                     setShowProfile(false);
+                    clearTokens();
                     router.push("/login");
                   }}
                   className="flex w-full items-center gap-2 rounded-xl px-3.5 py-2.5 text-xs text-rose-600 hover:bg-rose-50 dark:text-rose-400 dark:hover:bg-rose-950/20"

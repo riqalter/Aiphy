@@ -16,6 +16,7 @@ interface CourseCardProps {
   progressPercentage?: number;
   price?: string;
   originalPrice?: string;
+  onPrintCertificate?: (e: React.MouseEvent) => void;
 }
 
 export default function CourseCard({
@@ -32,6 +33,7 @@ export default function CourseCard({
   progressPercentage,
   price,
   originalPrice,
+  onPrintCertificate,
 }: CourseCardProps) {
   return (
     <div className="flex flex-col overflow-hidden rounded-3xl border border-slate-200/80 bg-white shadow-sm hover:shadow-md transition-all duration-300 dark:border-slate-800 dark:bg-slate-900">
@@ -103,17 +105,31 @@ export default function CourseCard({
         {/* Dynamic section: Enrolled progress vs Price buy */}
         <div className="mt-5 border-t border-slate-100 pt-4 dark:border-slate-800/80">
           {type === "enrolled" ? (
-            <div className="w-full">
-              <div className="flex items-center justify-between text-[11px] font-bold text-slate-500 dark:text-slate-400 mb-1.5">
-                <span>{progressText}</span>
-                <span>{progressPercentage}%</span>
+            <div className="w-full space-y-3">
+              <div>
+                <div className="flex items-center justify-between text-[11px] font-bold text-slate-500 dark:text-slate-400 mb-1.5">
+                  <span>{progressText}</span>
+                  <span>{progressPercentage}%</span>
+                </div>
+                <div className="h-1.5 w-full rounded-full bg-slate-100 dark:bg-slate-800 overflow-hidden">
+                  <div 
+                    className="h-full rounded-full bg-indigo-600" 
+                    style={{ width: `${progressPercentage}%` }}
+                  />
+                </div>
               </div>
-              <div className="h-1.5 w-full rounded-full bg-slate-100 dark:bg-slate-800 overflow-hidden">
-                <div 
-                  className="h-full rounded-full bg-indigo-600" 
-                  style={{ width: `${progressPercentage}%` }}
-                />
-              </div>
+              {progressPercentage === 100 && onPrintCertificate && (
+                <button
+                  onClick={(e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    onPrintCertificate(e);
+                  }}
+                  className="w-full flex items-center justify-center gap-1.5 rounded-2xl bg-indigo-600 hover:bg-indigo-500 text-white text-[11px] font-bold py-2 transition shadow-md shadow-indigo-600/10 cursor-pointer"
+                >
+                  Cetak Sertifikat
+                </button>
+              )}
             </div>
           ) : (
             <div className="flex items-center justify-between">

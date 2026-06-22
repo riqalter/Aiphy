@@ -2,16 +2,21 @@
 
 import { Flame } from "lucide-react";
 
-export default function StreakCard() {
-  const days = [
-    { name: "Mon", active: true },
-    { name: "Tue", active: true },
-    { name: "Wed", active: true },
-    { name: "Thu", active: false },
-    { name: "Fri", active: false },
-    { name: "Sat", active: false },
-    { name: "Sun", active: false },
-  ];
+interface StreakCardProps {
+  currentStreak?: number;
+  longestStreak?: number;
+  weeklyActive?: boolean[];
+}
+
+export default function StreakCard({ currentStreak = 0, longestStreak = 0, weeklyActive = [] }: StreakCardProps) {
+  const dayNames = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
+  const days = dayNames.map((name, idx) => {
+    // Sunday in javascript is index 0. Mon is 1, Tue is 2, ..., Sat is 6.
+    // Our visual order is Mon (idx 0), Tue (idx 1), ..., Sun (idx 6).
+    const dayIndex = idx === 6 ? 0 : idx + 1;
+    const active = weeklyActive[dayIndex] || false;
+    return { name, active };
+  });
 
   return (
     <div className="flex flex-col justify-between rounded-3xl border border-slate-200 bg-white p-6 shadow-sm dark:border-slate-800 dark:bg-slate-900">
@@ -22,13 +27,13 @@ export default function StreakCard() {
             Weekly Streak
           </h3>
           <p className="text-2xl font-extrabold text-slate-900 mt-1 dark:text-white">
-            5 Days
+            {currentStreak} Hari
           </p>
         </div>
 
         {/* Top Right Badge */}
         <span className="inline-flex items-center rounded-xl bg-indigo-50 px-3 py-1.5 text-xs font-bold text-indigo-600 dark:bg-indigo-950/50 dark:text-indigo-400">
-          #15 days Streak
+          Streak Terpanjang: {longestStreak} Hari
         </span>
       </div>
 

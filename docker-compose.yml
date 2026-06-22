@@ -8,8 +8,30 @@ services:
       - "3000:3000"
     environment:
       - NODE_ENV=production
+      - NEXT_PUBLIC_API_URL=http://localhost:4000
+      - API_URL=http://api:4000
+    depends_on:
+      - api
+    restart: always
+
+  api:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: aiphy-backend
+    ports:
+      - "4000:4000"
+    env_file:
+      - ./backend/.env
+    environment:
+      - PORT=4000
+      - NODE_ENV=production
       - DATABASE_URL=postgresql://aiphy_user:aiphy_password@db:5432/aiphy_db
       - REDIS_URL=redis://redis:6379
+      - FRONTEND_URL=http://localhost:3000
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - uploads_data:/app/uploads
     depends_on:
       - db
       - redis
@@ -37,6 +59,16 @@ services:
       - redis_data:/data
     restart: always
 
+  python-sandbox:
+    build:
+      context: ./backend
+      dockerfile: sandbox/Dockerfile.python
+    container_name: aiphy-sandbox
+    command: tail -f /dev/null
+    network_mode: none
+    restart: always
+
 volumes:
   postgres_data:
   redis_data:
+  uploads_data:

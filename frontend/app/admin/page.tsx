@@ -1,5 +1,6 @@
 "use client";
 
+import { useState, useEffect } from "react";
 import Sidebar from "@/components/sidebar";
 import Header from "@/components/header";
 import Link from "next/link";
@@ -7,28 +8,61 @@ import {
   Users, BookOpen, Coins, ShieldAlert, TrendingUp, Sparkles, Activity,
   ArrowRight, ShieldCheck, Zap
 } from "lucide-react";
+import { api } from "../lib/api";
 
 export default function AdminDashboardPage() {
+  const [statsData, setStatsData] = useState<any>(null);
+  const [activityFeed, setActivityFeed] = useState<any[]>([]);
+  const [profile, setProfile] = useState<any>(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    async function loadAdminData() {
+      try {
+        const [statsRes, activityRes, profileRes] = await Promise.all([
+          api.get("/api/admin/stats").catch(() => ({ data: { totalUsers: 0, totalCourses: 0, totalTokens: 0 } })),
+          api.get("/api/admin/activity").catch(() => ({ data: [] })),
+          api.get("/api/user/profile").catch(() => null)
+        ]);
+
+        setStatsData(statsRes.data);
+        setActivityFeed(activityRes.data || []);
+        if (profileRes) {
+          setProfile(profileRes.data);
+        }
+      } catch (err) {
+        console.error("Gagal memuat analitik admin:", err);
+      } finally {
+        setLoading(false);
+      }
+    }
+    loadAdminData();
+  }, []);
+
   const stats = [
-    { name: "Total Pengguna", val: "728", icon: Users, diff: "+12.5% minggu ini", color: "text-blue-500", bg: "bg-blue-50 dark:bg-blue-950/20" },
-    { name: "Modul Aktif", val: "18", icon: BookOpen, diff: "6 modul Machine Learning", color: "text-red-500", bg: "bg-red-50 dark:bg-red-950/20" },
-    { name: "Token API Terpakai", val: "4.2M", icon: Coins, diff: "$56.24 Estimasi Biaya", color: "text-emerald-500", bg: "bg-emerald-50 dark:bg-emerald-950/20" },
+    { name: "Total Pengguna", val: statsData?.totalUsers?.toString() || "0", icon: Users, diff: "Siswa terdaftar aktif", color: "text-blue-500", bg: "bg-blue-50 dark:bg-blue-950/20" },
+    { name: "Total Kelas", val: statsData?.totalCourses?.toString() || "0", icon: BookOpen, diff: "Kurikulum diterbitkan", color: "text-red-500", bg: "bg-red-50 dark:bg-red-950/20" },
+    { name: "Token AI Terpakai", val: statsData?.totalTokens?.toLocaleString() || "0", icon: Coins, diff: "Pemakaian LLM Tutor", color: "text-emerald-500", bg: "bg-emerald-50 dark:bg-emerald-950/20" },
     { name: "Isu Keamanan", val: "0", icon: ShieldAlert, diff: "Sistem Terlindungi", color: "text-rose-500", bg: "bg-rose-50 dark:bg-rose-950/20" }
   ];
 
-  const recentActivity = [
-    { id: 1, user: "Nadya Najelina", action: "Menyelesaikan kuis Naive Bayes", time: "10 menit yang lalu", type: "success" },
-    { id: 2, user: "Budi Santoso", action: "Mengakses notebook Diabetes Classification", time: "45 menit yang lalu", type: "info" },
-    { id: 3, user: "Dewi Lestari (Admin)", action: "Menambahkan modul Clustering Baru", time: "2 jam yang lalu", type: "admin" },
-    { id: 4, user: "Sistem AIphy", action: "Membersihkan log lama (Cron job)", time: "5 jam yang lalu", type: "system" }
-  ];
+  if (loading) {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-slate-50 dark:bg-slate-955">
+        <div className="text-center">
+          <div className="h-12 w-12 animate-spin rounded-full border-4 border-indigo-600 border-t-transparent mx-auto dark:border-indigo-400"></div>
+          <p className="mt-4 text-xs font-semibold text-slate-500 dark:text-slate-400">Memuat Analitik Admin...</p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-[#F8FAFC] pl-20 dark:bg-slate-950">
       <Sidebar />
 
       <main className="mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8">
-        <Header userName="Administrator" userTitle="Manajemen data pengguna, konten kurikulum, dan pemantauan AIphy." />
+        <Header userName={profile?.name || "Administrator"} userTitle="Manajemen data pengguna, konten kurikulum, dan pemantauan AIphy." />
 
         {/* stats grid */}
         <section className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-4 mt-8">
@@ -63,21 +97,27 @@ export default function AdminDashboardPage() {
               </h3>
             </div>
             
-            <div className="mt-4 space-y-4">
-              {recentActivity.map((act) => (
-                <div key={act.id} className="flex items-start justify-between text-xs p-3 hover:bg-slate-50 rounded-2xl dark:hover:bg-slate-850/30">
-                  <div className="flex items-center gap-3">
-                    <span className="text-base">
-                      {act.type === "success" ? "✅" : act.type === "info" ? "💻" : act.type === "admin" ? "🔑" : "⚙️"}
-                    </span>
-                    <div>
-                      <p className="font-extrabold text-slate-950 dark:text-white">{act.user}</p>
-                      <p className="text-slate-550 dark:text-slate-400 mt-0.5">{act.action}</p>
+            <div className="mt-4 space-y-4 max-h-[350px] overflow-y-auto pr-1">
+              {activityFeed.length > 0 ? (
+                activityFeed.map((act) => (
+                  <div key={act.id} className="flex items-start justify-between text-xs p-3 hover:bg-slate-50 rounded-2xl dark:hover:bg-slate-850/30">
+                    <div className="flex items-center gap-3">
+                      <span className="text-base">
+                        {act.actionType === "login" ? "🔑" : act.actionType === "complete" ? "✅" : "⚙️"}
+                      </span>
+                      <div>
+                        <p className="font-extrabold text-slate-950 dark:text-white">{act.userEmail || "Siswa AIphy"}</p>
+                        <p className="text-slate-550 dark:text-slate-400 mt-0.5">{act.details || act.action}</p>
+                      </div>
                     </div>
+                    <span className="text-[10px] font-bold text-slate-400 shrink-0">
+                      {new Date(act.timestamp || act.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                    </span>
                   </div>
-                  <span className="text-[10px] font-bold text-slate-400 shrink-0">{act.time}</span>
-                </div>
-              ))}
+                ))
+              ) : (
+                <p className="text-xs text-slate-400 text-center py-12">Belum ada aktivitas terbaru.</p>
+              )}
             </div>
           </div>
 

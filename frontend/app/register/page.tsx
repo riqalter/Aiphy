@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { Sparkles, Mail, Lock, User, ArrowRight } from "lucide-react";
+import { api, saveTokens, saveCurrentUser } from "../lib/api";
 
 export default function RegisterPage() {
   const router = useRouter();
@@ -11,15 +12,23 @@ export default function RegisterPage() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
 
-  const handleRegister = (e: React.FormEvent) => {
+  const handleRegister = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
-    // Simulate registration
-    setTimeout(() => {
+    setError("");
+
+    try {
+      const res = await api.post("/api/auth/register", { name, email, password });
+      saveTokens(res.data.accessToken, res.data.refreshToken);
+      saveCurrentUser(res.data.user);
+      router.push("/dashboard");
+    } catch (err: any) {
+      setError(err.message || "Pendaftaran gagal. Silakan coba lagi.");
+    } finally {
       setLoading(false);
-      router.push("/");
-    }, 1500);
+    }
   };
 
   return (
@@ -42,6 +51,12 @@ export default function RegisterPage() {
               </Link>
             </p>
           </div>
+
+          {error && (
+            <div className="mt-4 rounded-xl bg-red-50 p-3 text-xs font-semibold text-red-600 dark:bg-red-950/20 dark:text-red-400">
+              {error}
+            </div>
+          )}
 
           <div className="mt-8">
             <form onSubmit={handleRegister} className="space-y-6">
