@@ -6,6 +6,79 @@ import { Send, Bot, MessageSquare, Plus, Trash2 } from "lucide-react";
 import { useState, useEffect } from "react";
 import { api } from "../lib/api";
 
+// Helper function to render simple markdown formatting in chat dialogs
+const parseMarkdown = (text: string) => {
+  if (!text) return "";
+
+  // Split by code blocks first
+  const parts = text.split(/(```[a-z]*\n[\s\S]*?\n```)/g);
+
+  return parts.map((part, index) => {
+    // Check if code block
+    if (part.startsWith("```")) {
+      const match = part.match(/```([a-z]*)\n([\s\S]*?)\n```/);
+      const language = match ? match[1] : "";
+      const code = match ? match[2] : part.slice(3, -3);
+
+      return (
+        <pre key={index} className="my-2 p-2.5 rounded-xl bg-slate-950 border border-slate-800 text-[10.5px] font-mono text-emerald-400 overflow-x-auto leading-relaxed dark:bg-slate-950 dark:border-slate-850">
+          {language && (
+            <span className="block text-[8px] font-sans font-bold text-slate-500 uppercase tracking-widest mb-1 border-b border-slate-900 pb-0.5">
+              {language}
+            </span>
+          )}
+          <code>{code}</code>
+        </pre>
+      );
+    }
+
+    // Process inline elements line-by-line
+    const lines = part.split("\n");
+    return (
+      <div key={index} className="space-y-1">
+        {lines.map((line, lineIdx) => {
+          let cleanLine = line;
+
+          // Check if bullet point
+          const isBullet = cleanLine.startsWith("- ") || cleanLine.startsWith("* ");
+          if (isBullet) {
+            cleanLine = cleanLine.slice(2);
+          }
+
+          // Regex to parse **bold** and `code`
+          const inlineRegex = /(\*\*.*?\*\*|`.*?`)/g;
+          const tokens = cleanLine.split(inlineRegex);
+
+          const parsedElements = tokens.map((token, tokenIdx) => {
+            if (token.startsWith("**") && token.endsWith("**")) {
+              return <strong key={tokenIdx} className="font-extrabold">{token.slice(2, -2)}</strong>;
+            }
+            if (token.startsWith("`") && token.endsWith("`")) {
+              return <code key={tokenIdx} className="px-1 py-0.5 rounded bg-slate-100 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 font-mono text-[10px] text-pink-650 dark:text-pink-400">{token.slice(1, -1)}</code>;
+            }
+            return token;
+          });
+
+          if (isBullet) {
+            return (
+              <ul key={lineIdx} className="list-disc pl-4 space-y-0.5 text-xs">
+                <li>{parsedElements}</li>
+              </ul>
+            );
+          }
+
+          // Render empty lines as linebreaks
+          if (line.trim() === "") {
+            return <div key={lineIdx} className="h-1.5" />;
+          }
+
+          return <p key={lineIdx} className="leading-relaxed">{parsedElements}</p>;
+        })}
+      </div>
+    );
+  });
+};
+
 export default function AiChatPage() {
   const [profile, setProfile] = useState<any>(null);
   const [conversations, setConversations] = useState<any[]>([]);
@@ -263,7 +336,7 @@ export default function AiChatPage() {
                         : "bg-slate-50 text-slate-800 dark:bg-slate-800/40 dark:text-slate-200 rounded-tl-none border border-slate-100/50 dark:border-slate-800/50"
                     }`}
                   >
-                    {msg.text || (sending && idx === messages.length - 1 && "AIphy sedang memikirkan jawaban...")}
+                    {msg.text ? parseMarkdown(msg.text) : (sending && idx === messages.length - 1 && <span className="animate-pulse">AIphy sedang memikirkan jawaban...</span>)}
                   </div>
                 </div>
               ))}

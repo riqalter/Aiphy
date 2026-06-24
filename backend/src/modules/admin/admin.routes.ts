@@ -3,6 +3,7 @@ import { requireRole } from '../auth/auth.middleware';
 import { AdminCourseService } from './admin-course.service';
 import { AdminUserService } from './admin-user.service';
 import { AIService } from '../ai/ai.service';
+import { NotificationService } from '../notification/notification.service';
 import { redis } from '../../config/redis';
 import { env } from '../../config/env';
 import { db } from '../../config/database';
@@ -191,6 +192,81 @@ export const adminRoutes = new Elysia({ prefix: '/api/admin' })
     }
   )
 
+  // --- QUIZ MANAGEMENT ---
+
+  // Get quiz for a lesson (by lessonId)
+  .get(
+    '/quiz/:lessonId',
+    async ({ params }) => {
+      const quiz = await AdminCourseService.getQuizWithQuestions(params.lessonId);
+      return { success: true, data: quiz };
+    },
+    { params: t.Object({ lessonId: t.String() }) }
+  )
+
+  // Create or replace quiz for a lesson
+  .post(
+    '/quiz/:lessonId',
+    async ({ params, body }) => {
+      const quiz = await AdminCourseService.getOrCreateQuiz(params.lessonId, body);
+      return { success: true, message: 'Quiz saved', data: quiz };
+    },
+    {
+      params: t.Object({ lessonId: t.String() }),
+      body: t.Object({
+        title: t.String({ minLength: 2 }),
+        passingScore: t.Optional(t.Integer({ minimum: 1, maximum: 100 })),
+        timeLimitSeconds: t.Optional(t.Integer({ minimum: 0 })),
+      }),
+    }
+  )
+
+  // Add a question to a quiz
+  .post(
+    '/quiz/:lessonId/questions',
+    async ({ params, body }) => {
+      const question = await AdminCourseService.addQuestion(params.lessonId, body);
+      return { success: true, message: 'Question added', data: question };
+    },
+    {
+      params: t.Object({ lessonId: t.String() }),
+      body: t.Object({
+        text: t.String({ minLength: 5 }),
+        options: t.Array(t.String({ minLength: 1 }), { minItems: 2 }),
+        correctAnswer: t.String({ minLength: 1 }),
+        explanation: t.Optional(t.String()),
+      }),
+    }
+  )
+
+  // Update a quiz question
+  .put(
+    '/quiz-questions/:questionId',
+    async ({ params, body }) => {
+      const question = await AdminCourseService.updateQuestion(params.questionId, body);
+      return { success: true, message: 'Question updated', data: question };
+    },
+    {
+      params: t.Object({ questionId: t.String() }),
+      body: t.Object({
+        text: t.Optional(t.String({ minLength: 5 })),
+        options: t.Optional(t.Array(t.String({ minLength: 1 }), { minItems: 2 })),
+        correctAnswer: t.Optional(t.String({ minLength: 1 })),
+        explanation: t.Optional(t.String()),
+      }),
+    }
+  )
+
+  // Delete a quiz question
+  .delete(
+    '/quiz-questions/:questionId',
+    async ({ params }) => {
+      const result = await AdminCourseService.deleteQuestion(params.questionId);
+      return result;
+    },
+    { params: t.Object({ questionId: t.String() }) }
+  )
+
   // --- FILE UPLOAD ---
 
   .post(
@@ -320,6 +396,7 @@ export const adminRoutes = new Elysia({ prefix: '/api/admin' })
         name: t.Optional(t.String({ minLength: 2 })),
         role: t.Optional(t.Enum({ learner: 'learner', instructor: 'instructor', content_admin: 'content_admin', super_admin: 'super_admin' } as const)),
         status: t.Optional(t.Enum({ active: 'active', inactive: 'inactive', suspended: 'suspended' } as const)),
+        planName: t.Optional(t.Enum({ 'Basic Learner': 'Basic Learner', 'Pro Learner': 'Pro Learner' } as const)),
       }),
     }
   )
@@ -414,4 +491,42 @@ export const adminRoutes = new Elysia({ prefix: '/api/admin' })
         createdAt: l.createdAt,
       })),
     };
-  });
+  })
+
+  // 14. Send/Broadcast notification to a user or all users
+  .post(
+    '/notifications',
+    async ({ body }) => {
+      const { userId, type, title, message } = body;
+
+      if (userId === 'all') {
+        const allUsers = await db.select({ id: users.id }).from(users);
+        const insertions = allUsers.map(u => 
+          NotificationService.createNotification({
+            userId: u.id,
+            type: type ?? 'info',
+            title,
+            message,
+          })
+        );
+        await Promise.all(insertions);
+        return { success: true, message: `Notification broadcasted to ${allUsers.length} users` };
+      } else {
+        const notif = await NotificationService.createNotification({
+          userId,
+          type: type ?? 'info',
+          title,
+          message,
+        });
+        return { success: true, message: 'Notification sent successfully', data: notif };
+      }
+    },
+    {
+      body: t.Object({
+        userId: t.String(),
+        type: t.Optional(t.Enum({ info: 'info', success: 'success', warning: 'warning', streak: 'streak', badge: 'badge' } as const)),
+        title: t.String({ minLength: 2 }),
+        message: t.String({ minLength: 2 }),
+      }),
+    }
+  );

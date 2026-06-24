@@ -216,6 +216,37 @@ export class AIService {
         
         systemPrompt += "\nGunakan konteks kurikulum di atas untuk memberikan jawaban bimbingan belajar yang sinkron dan relevan dengan materi kelas mereka.";
       }
+    } else {
+      // General AI Chat Context (Global Chat)
+      try {
+        const activeCourses = await db
+          .select({
+            id: courses.id,
+            title: courses.title,
+            category: courses.category,
+            level: courses.level,
+            description: courses.description,
+            price: courses.price,
+          })
+          .from(courses)
+          .where(eq(courses.isPublished, true));
+
+        if (activeCourses && activeCourses.length > 0) {
+          systemPrompt += "Berikut adalah daftar kelas/kursus yang saat ini tersedia dan aktif di platform pembelajaran AIphy:\n";
+          for (const course of activeCourses) {
+            const priceText = course.price === 0 ? "Gratis" : `Rp ${course.price.toLocaleString('id-ID')}`;
+            systemPrompt += `- **${course.title}** (Kategori: ${course.category}, Tingkat: ${course.level}, Harga: ${priceText})\n`;
+            systemPrompt += `  Deskripsi: ${course.description}\n`;
+            systemPrompt += `  Link Kursus: /courses/${course.id}\n\n`;
+          }
+          systemPrompt += "Gunakan daftar di atas untuk menjawab pertanyaan siswa mengenai kursus apa saja yang tersedia, rekomendasi belajar, deskripsi kursus, atau tautan akses menuju kursus tersebut.\n";
+          systemPrompt += "Selalu sarankan siswa untuk mengklik tautan kursus /courses/[id-kursus] jika mereka tertarik untuk mendaftar atau belajar kelas tersebut.";
+        } else {
+          systemPrompt += "Saat ini belum ada kursus yang diterbitkan secara aktif di platform AIphy.\n";
+        }
+      } catch (err) {
+        console.error('[AI General Courses Load Error]', err);
+      }
     }
 
     // 5. Retrieve recent chat history

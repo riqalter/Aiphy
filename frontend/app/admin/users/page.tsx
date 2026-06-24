@@ -3,7 +3,7 @@
 import Sidebar from "@/components/sidebar";
 import Header from "@/components/header";
 import { useState, useEffect } from "react";
-import { Plus, Trash2, ShieldAlert, Search, ShieldCheck } from "lucide-react";
+import { Plus, Trash2, ShieldAlert, Search, ShieldCheck, Send, Bell } from "lucide-react";
 import { api } from "../../lib/api";
 
 export default function AdminUsersPage() {
@@ -16,6 +16,14 @@ export default function AdminUsersPage() {
   const [newUserName, setNewUserName] = useState("");
   const [newUserEmail, setNewUserEmail] = useState("");
   const [newUserRole, setNewUserRole] = useState("learner");
+
+  // Notification modal states
+  const [notifModalOpen, setNotifModalOpen] = useState(false);
+  const [notifTargetUserId, setNotifTargetUserId] = useState("all");
+  const [notifTargetUserName, setNotifTargetUserName] = useState("Semua Pengguna");
+  const [notifTitle, setNotifTitle] = useState("");
+  const [notifMessage, setNotifMessage] = useState("");
+  const [notifType, setNotifType] = useState("info");
 
   // Load profile and user list
   const fetchUsers = async (search = "") => {
@@ -54,6 +62,18 @@ export default function AdminUsersPage() {
 
     return () => clearTimeout(delayDebounceFn);
   }, [searchQuery]);
+
+  // Toggle user subscription plan between Basic Learner and Pro Learner
+  const handleTogglePlan = async (userId: string, currentPlan: string) => {
+    const nextPlan = currentPlan === "Pro Learner" ? "Basic Learner" : "Pro Learner";
+    try {
+      await api.put(`/api/admin/users/${userId}`, { planName: nextPlan });
+      alert(`User berhasil di-upgrade/downgrade ke paket ${nextPlan}!`);
+      fetchUsers(searchQuery);
+    } catch (err: any) {
+      alert("Gagal memperbarui paket langganan: " + err.message);
+    }
+  };
 
   // Toggle user block/suspend status
   const handleToggleBlock = async (userId: string, currentStatus: string) => {
@@ -102,6 +122,29 @@ export default function AdminUsersPage() {
     }
   };
 
+  // Send a custom notification to a user or broadcast to all users
+  const handleSendNotification = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!notifTitle.trim() || !notifMessage.trim()) return;
+
+    try {
+      await api.post("/api/admin/notifications", {
+        userId: notifTargetUserId,
+        type: notifType,
+        title: notifTitle,
+        message: notifMessage,
+      });
+
+      alert(`Pemberitahuan berhasil terkirim ke: ${notifTargetUserName}!`);
+      setNotifModalOpen(false);
+      setNotifTitle("");
+      setNotifMessage("");
+      setNotifType("info");
+    } catch (err: any) {
+      alert("Gagal mengirim pemberitahuan: " + err.message);
+    }
+  };
+
   // Map backend roles to pretty frontend tags
   const getRoleLabel = (role: string) => {
     switch (role) {
@@ -147,14 +190,30 @@ export default function AdminUsersPage() {
               />
             </div>
 
-            {/* Quick Add Button */}
-            <button
-              onClick={() => setNewUserOpen(!newUserOpen)}
-              className="rounded-2xl bg-indigo-600 px-5 py-2.5 text-xs font-bold text-white hover:bg-indigo-500 transition shadow-md shadow-indigo-600/10 flex items-center gap-1.5 self-start sm:self-auto cursor-pointer"
-            >
-              <Plus className="h-4.5 w-4.5" />
-              Tambah Akun Baru
-            </button>
+            {/* Quick Add & Broadcast Buttons */}
+            <div className="flex items-center gap-2 self-start sm:self-auto">
+              <button
+                onClick={() => {
+                  setNotifTargetUserId("all");
+                  setNotifTargetUserName("Semua Pengguna");
+                  setNotifTitle("");
+                  setNotifMessage("");
+                  setNotifType("info");
+                  setNotifModalOpen(true);
+                }}
+                className="rounded-2xl border border-indigo-200 text-indigo-600 bg-indigo-50/10 hover:bg-indigo-50 dark:border-indigo-900 dark:text-indigo-400 dark:bg-indigo-950/10 dark:hover:bg-indigo-950 px-4 py-2.5 text-xs font-bold transition flex items-center gap-1.5 cursor-pointer"
+              >
+                <Bell className="h-4 w-4" />
+                Kirim Notifikasi Massal
+              </button>
+              <button
+                onClick={() => setNewUserOpen(!newUserOpen)}
+                className="rounded-2xl bg-indigo-600 px-4 py-2.5 text-xs font-bold text-white hover:bg-indigo-500 transition shadow-md shadow-indigo-600/10 flex items-center gap-1.5 cursor-pointer"
+              >
+                <Plus className="h-4.5 w-4.5" />
+                Tambah Akun Baru
+              </button>
+            </div>
           </div>
 
           {/* Add User Section Form */}
@@ -224,6 +283,7 @@ export default function AdminUsersPage() {
                     <th className="p-4 font-bold">Nama</th>
                     <th className="p-4 font-bold">Email</th>
                     <th className="p-4 font-bold">Hak Akses</th>
+                    <th className="p-4 font-bold">Paket Langganan</th>
                     <th className="p-4 font-bold">Status</th>
                     <th className="p-4 font-bold text-right">Aksi</th>
                   </tr>
@@ -237,6 +297,15 @@ export default function AdminUsersPage() {
                         <td className="p-4 font-medium">{getRoleLabel(user.role)}</td>
                         <td className="p-4">
                           <span className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-[10px] font-bold ${
+                            user.planName === "Pro Learner"
+                              ? "bg-indigo-50 text-indigo-750 dark:bg-indigo-950/20 dark:text-indigo-400"
+                              : "bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-400"
+                          }`}>
+                            {user.planName || "Basic Learner"}
+                          </span>
+                        </td>
+                        <td className="p-4">
+                          <span className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-[10px] font-bold ${
                             user.status === "active" 
                               ? "bg-emerald-50 text-emerald-700 dark:bg-emerald-950/20 dark:text-emerald-400"
                               : "bg-rose-50 text-rose-700 dark:bg-rose-955/20 dark:text-rose-400"
@@ -246,14 +315,38 @@ export default function AdminUsersPage() {
                         </td>
                         <td className="p-4 text-right flex items-center justify-end gap-2">
                           <button
+                            onClick={() => handleTogglePlan(user.id, user.planName)}
+                            className={`rounded-xl px-3 py-1.5 text-[10px] font-bold border transition ${
+                              user.planName === "Pro Learner"
+                                ? "border-slate-200 text-slate-600 hover:bg-slate-50 dark:border-slate-800 dark:hover:bg-slate-800 dark:text-slate-300"
+                                : "border-indigo-200 bg-indigo-50/20 text-indigo-650 hover:bg-indigo-50 dark:border-indigo-900 dark:bg-indigo-950/20 dark:text-indigo-400 dark:hover:bg-indigo-950"
+                            }`}
+                          >
+                            {user.planName === "Pro Learner" ? "Downgrade ke Basic" : "Upgrade ke Pro"}
+                          </button>
+                          <button
                             onClick={() => handleToggleBlock(user.id, user.status)}
-                            className="rounded-xl border border-slate-200 px-3 py-1.5 text-[10px] font-bold hover:bg-slate-50 dark:border-slate-800 dark:hover:bg-slate-800 transition"
+                            className="rounded-xl border border-slate-200 px-3 py-1.5 text-[10px] font-bold hover:bg-slate-50 dark:border-slate-800 dark:hover:bg-slate-800 transition cursor-pointer"
                           >
                             {user.status === "active" ? "Blokir" : "Aktifkan"}
                           </button>
                           <button
+                            onClick={() => {
+                              setNotifTargetUserId(user.id);
+                              setNotifTargetUserName(user.name);
+                              setNotifTitle("");
+                              setNotifMessage("");
+                              setNotifType("info");
+                              setNotifModalOpen(true);
+                            }}
+                            title="Kirim Notifikasi"
+                            className="flex h-7 w-7 items-center justify-center rounded-xl bg-slate-100 text-slate-500 hover:bg-indigo-50 hover:text-indigo-600 dark:bg-slate-850 dark:hover:bg-indigo-950/30 transition cursor-pointer"
+                          >
+                            <Send className="h-3.5 w-3.5" />
+                          </button>
+                          <button
                             onClick={() => handleDeleteUser(user.id)}
-                            className="flex h-7 w-7 items-center justify-center rounded-xl bg-slate-100 text-slate-500 hover:bg-rose-50 hover:text-rose-600 dark:bg-slate-850 dark:hover:bg-rose-950/30"
+                            className="flex h-7 w-7 items-center justify-center rounded-xl bg-slate-100 text-slate-500 hover:bg-rose-50 hover:text-rose-600 dark:bg-slate-850 dark:hover:bg-rose-955/30 transition cursor-pointer"
                           >
                             <Trash2 className="h-3.5 w-3.5" />
                           </button>
@@ -262,7 +355,7 @@ export default function AdminUsersPage() {
                     ))
                   ) : (
                     <tr>
-                      <td colSpan={5} className="p-8 text-center text-xs font-semibold text-slate-400">
+                      <td colSpan={6} className="p-8 text-center text-xs font-semibold text-slate-400">
                         Tidak ada pengguna yang terdaftar atau cocok dengan pencarian Anda.
                       </td>
                     </tr>
@@ -271,6 +364,91 @@ export default function AdminUsersPage() {
               </table>
             </div>
           </div>
+
+          {/* Notification Sender Modal */}
+          {notifModalOpen && (
+            <div className="fixed inset-0 bg-slate-950/40 backdrop-blur-xs flex items-center justify-center z-50 p-4">
+              <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl p-6 max-w-md w-full shadow-2xl space-y-4">
+                <div className="flex justify-between items-center pb-2 border-b border-slate-100 dark:border-slate-800">
+                  <h4 className="text-xs font-extrabold text-slate-900 dark:text-white uppercase tracking-wider">
+                    Kirim Notifikasi
+                  </h4>
+                  <button
+                    onClick={() => setNotifModalOpen(false)}
+                    className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 text-xs font-bold"
+                  >
+                    Tutup
+                  </button>
+                </div>
+
+                <form onSubmit={handleSendNotification} className="space-y-3.5">
+                  <div>
+                    <label className="block text-[9px] font-bold text-slate-400 uppercase tracking-widest">Penerima</label>
+                    <input
+                      type="text"
+                      disabled
+                      value={notifTargetUserName}
+                      className="mt-1 w-full rounded-xl border border-slate-200 bg-slate-100 dark:border-slate-800 dark:bg-slate-950 px-3 py-2 text-xs font-bold text-slate-500 dark:text-slate-400"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-[9px] font-bold text-slate-400 uppercase tracking-widest">Judul</label>
+                    <input
+                      type="text"
+                      required
+                      value={notifTitle}
+                      onChange={(e) => setNotifTitle(e.target.value)}
+                      placeholder="Contoh: Modul Baru Diterbitkan"
+                      className="mt-1 w-full rounded-xl border border-slate-200 bg-slate-50 px-3.5 py-2 text-xs font-semibold outline-none focus:border-indigo-500 dark:border-slate-800 dark:bg-slate-955 dark:text-white"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-[9px] font-bold text-slate-400 uppercase tracking-widest">Tipe Notifikasi</label>
+                    <select
+                      value={notifType}
+                      onChange={(e) => setNotifType(e.target.value)}
+                      className="mt-1 w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-xs font-bold outline-none focus:border-indigo-500 dark:border-slate-800 dark:bg-slate-955 dark:text-indigo-200"
+                    >
+                      <option value="info">📢 Info Umum</option>
+                      <option value="success">✅ Sukses / Kelulusan</option>
+                      <option value="streak">🔥 Streak Belajar</option>
+                      <option value="badge">🏆 Badge Baru</option>
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="block text-[9px] font-bold text-slate-400 uppercase tracking-widest">Pesan</label>
+                    <textarea
+                      required
+                      rows={3}
+                      value={notifMessage}
+                      onChange={(e) => setNotifMessage(e.target.value)}
+                      placeholder="Tulis pesan pemberitahuan di sini..."
+                      className="mt-1 w-full rounded-xl border border-slate-200 bg-slate-50 px-3.5 py-2 text-xs font-semibold outline-none focus:border-indigo-500 dark:border-slate-800 dark:bg-slate-955 dark:text-white"
+                    />
+                  </div>
+
+                  <div className="flex justify-end gap-2 pt-2 border-t border-slate-100 dark:border-slate-800">
+                    <button
+                      type="button"
+                      onClick={() => setNotifModalOpen(false)}
+                      className="rounded-xl border border-slate-200 px-4 py-2 text-[10px] font-bold text-slate-600 hover:bg-slate-50 dark:border-slate-800 dark:text-slate-400 dark:hover:bg-slate-900 cursor-pointer"
+                    >
+                      Batal
+                    </button>
+                    <button
+                      type="submit"
+                      className="rounded-xl bg-indigo-600 px-4 py-2 text-[10px] font-bold text-white hover:bg-indigo-550 transition shadow-md cursor-pointer"
+                    >
+                      Kirim Notifikasi
+                    </button>
+                  </div>
+                </form>
+              </div>
+            </div>
+          )}
 
         </div>
       </main>

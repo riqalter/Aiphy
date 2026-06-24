@@ -4,10 +4,16 @@ import Sidebar from "@/components/sidebar";
 import Header from "@/components/header";
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
+import dynamic from "next/dynamic";
 import { 
-  BookOpen, Plus, Trash2, Edit3, Eye, Save, Sparkles, Check
+  BookOpen, Plus, Trash2, Edit3, Eye, Save, Sparkles, Check,
+  Code2, HelpCircle, ChevronDown, ChevronUp, X, Timer, Award
 } from "lucide-react";
 import { api } from "../../lib/api";
+
+const CodeMirrorEditor = dynamic(() => import("@uiw/react-codemirror"), { ssr: false });
+import { python } from "@codemirror/lang-python";
+import { oneDark } from "@codemirror/theme-one-dark";
 
 export default function AdminCoursesCMSPage() {
   const router = useRouter();
@@ -37,6 +43,36 @@ export default function AdminCoursesCMSPage() {
   const [newLessonType, setNewLessonType] = useState("video");
   const [newLessonDuration, setNewLessonDuration] = useState("15");
   const [newLessonMediaUrl, setNewLessonMediaUrl] = useState("");
+
+  // Quiz Editor States
+  const [quizData, setQuizData] = useState<any>(null); // current quiz for selected lesson
+  const [quizTitle, setQuizTitle] = useState("");
+  const [quizPassingScore, setQuizPassingScore] = useState(60);
+  const [quizTimeLimit, setQuizTimeLimit] = useState(0);
+  const [quizQuestions, setQuizQuestions] = useState<any[]>([]);
+  const [quizSaving, setQuizSaving] = useState(false);
+  const [quizSaved, setQuizSaved] = useState(false);
+  // New question form
+  const [newQText, setNewQText] = useState("");
+  const [newQOptions, setNewQOptions] = useState(["", "", "", ""]);
+  const [newQCorrect, setNewQCorrect] = useState("");
+  const [newQExplanation, setNewQExplanation] = useState("");
+  const [addingQuestion, setAddingQuestion] = useState(false);
+  // Edit question inline
+  const [editingQuestionId, setEditingQuestionId] = useState<string | null>(null);
+  const [editQText, setEditQText] = useState("");
+  const [editQOptions, setEditQOptions] = useState<string[]>(["", "", "", ""]);
+  const [editQCorrect, setEditQCorrect] = useState("");
+  const [editQExplanation, setEditQExplanation] = useState("");
+
+  // Missing and coding states
+  const [quizLoading, setQuizLoading] = useState(false);
+  const [codingStarterCode, setCodingStarterCode] = useState("");
+  const [codingOutput, setCodingOutput] = useState("");
+  const [codingError, setCodingError] = useState("");
+  const [codingPlots, setCodingPlots] = useState<string[]>([]);
+  const [codingRunning, setCodingRunning] = useState(false);
+  const [codingExecutionTime, setCodingExecutionTime] = useState<number | undefined>(undefined);
 
   // Load Admin profile and all courses
   const loadCMSData = async () => {
@@ -74,6 +110,16 @@ export default function AdminCoursesCMSPage() {
           setWysiwygTitle(fullLRes.data.title);
           setWysiwygContent(fullLRes.data.contentBody || "");
           setWysiwygMediaUrl(fullLRes.data.mediaUrl || "");
+
+          if (fullLRes.data.type === "quiz") {
+            await loadQuizForLesson(firstL.id);
+          } else if (fullLRes.data.type === "coding") {
+            setCodingStarterCode(fullLRes.data.contentBody || "");
+            setCodingOutput("");
+            setCodingError("");
+            setCodingPlots([]);
+            setCodingExecutionTime(undefined);
+          }
         }
       }
     } catch (err) {
@@ -98,6 +144,15 @@ export default function AdminCoursesCMSPage() {
         setWysiwygTitle(fullLRes.data.title);
         setWysiwygContent(fullLRes.data.contentBody || "");
         setWysiwygMediaUrl(fullLRes.data.mediaUrl || "");
+        if (fullLRes.data.type === "quiz") {
+          await loadQuizForLesson(selectNewLessonId);
+        } else if (fullLRes.data.type === "coding") {
+          setCodingStarterCode(fullLRes.data.contentBody || "");
+          setCodingOutput("");
+          setCodingError("");
+          setCodingPlots([]);
+          setCodingExecutionTime(undefined);
+        }
       } else if (res.data.modules?.length > 0 && res.data.modules[0].lessons?.length > 0) {
         const firstL = res.data.modules[0].lessons[0];
         const fullLRes = await api.get(`/api/courses/${courseId}/lessons/${firstL.id}`);
@@ -105,6 +160,15 @@ export default function AdminCoursesCMSPage() {
         setWysiwygTitle(fullLRes.data.title);
         setWysiwygContent(fullLRes.data.contentBody || "");
         setWysiwygMediaUrl(fullLRes.data.mediaUrl || "");
+        if (fullLRes.data.type === "quiz") {
+          await loadQuizForLesson(firstL.id);
+        } else if (fullLRes.data.type === "coding") {
+          setCodingStarterCode(fullLRes.data.contentBody || "");
+          setCodingOutput("");
+          setCodingError("");
+          setCodingPlots([]);
+          setCodingExecutionTime(undefined);
+        }
       } else {
         setSelectedLesson(null);
         setWysiwygTitle("");
@@ -216,15 +280,59 @@ export default function AdminCoursesCMSPage() {
     }
   };
 
+  // Load quiz data for a quiz-type lesson
+  const loadQuizForLesson = async (lessonId: string) => {
+    setQuizLoading(true);
+    try {
+      const res = await api.get(`/api/admin/quiz/${lessonId}`).catch(() => null);
+      if (res?.data) {
+        setQuizData(res.data);
+        setQuizPassingScore(res.data.passingScore ?? 60);
+        setQuizTimeLimit(res.data.timeLimitSeconds ?? 0);
+        setQuizTitle(res.data.title ?? "");
+        setQuizQuestions(res.data.questions ?? []);
+      } else {
+        setQuizData(null);
+        setQuizPassingScore(60);
+        setQuizTimeLimit(0);
+        setQuizTitle("");
+        setQuizQuestions([]);
+      }
+    } catch {
+      setQuizData(null);
+      setQuizQuestions([]);
+    } finally {
+      setQuizLoading(false);
+    }
+  };
+
   // Select lesson to edit
   const selectLesson = async (lessonId: string) => {
     try {
       const fullLRes = await api.get(`/api/courses/${selectedCourse.id}/lessons/${lessonId}`);
-      setSelectedLesson(fullLRes.data);
-      setWysiwygTitle(fullLRes.data.title);
-      setWysiwygContent(fullLRes.data.contentBody || "");
-      setWysiwygMediaUrl(fullLRes.data.mediaUrl || "");
+      const lesson = fullLRes.data;
+      setSelectedLesson(lesson);
+      setWysiwygTitle(lesson.title);
+      setWysiwygContent(lesson.contentBody || "");
+      setWysiwygMediaUrl(lesson.mediaUrl || "");
       setSaveSuccess(false);
+
+      // Load quiz data if quiz type
+      if (lesson.type === "quiz") {
+        await loadQuizForLesson(lessonId);
+      } else {
+        setQuizData(null);
+        setQuizQuestions([]);
+      }
+
+      // Load coding starter code if coding type
+      if (lesson.type === "coding") {
+        setCodingStarterCode(lesson.contentBody || "");
+        setCodingOutput("");
+        setCodingError("");
+        setCodingPlots([]);
+        setCodingExecutionTime(undefined);
+      }
     } catch (err) {
       console.error("Gagal mengambil detail materi:", err);
     }
@@ -246,6 +354,138 @@ export default function AdminCoursesCMSPage() {
       reloadSelectedCourse(selectedCourse.id, selectedLesson.id);
     } catch (err: any) {
       alert("Gagal menyimpan materi: " + err.message);
+    }
+  };
+
+  // Save quiz settings (title, passing score, time limit)
+  const handleSaveQuizSettings = async () => {
+    if (!selectedLesson) return;
+    try {
+      await api.post(`/api/admin/quiz/${selectedLesson.id}`, {
+        title: quizTitle || selectedLesson.title,
+        passingScore: quizPassingScore,
+        timeLimitSeconds: quizTimeLimit,
+      });
+      setSaveSuccess(true);
+      setTimeout(() => setSaveSuccess(false), 2000);
+      // Reload quiz
+      await loadQuizForLesson(selectedLesson.id);
+    } catch (err: any) {
+      alert("Gagal menyimpan pengaturan kuis: " + err.message);
+    }
+  };
+
+  // Add a new question to the quiz
+  const handleAddQuestion = async () => {
+    if (!selectedLesson || !newQText.trim()) return;
+    if (newQText.trim().length < 5) {
+      alert("Pertanyaan kuis minimal harus 5 karakter.");
+      return;
+    }
+    const activeOptions = newQOptions.filter(o => o.trim());
+    if (activeOptions.length < 2) {
+      alert("Minimal 2 pilihan jawaban diperlukan.");
+      return;
+    }
+    if (!newQCorrect.trim()) {
+      alert("Pilih jawaban yang benar terlebih dahulu.");
+      return;
+    }
+    try {
+      await api.post(`/api/admin/quiz/${selectedLesson.id}/questions`, {
+        text: newQText,
+        options: activeOptions,
+        correctAnswer: newQCorrect,
+        explanation: newQExplanation || undefined,
+      });
+      // Reset form
+      setNewQText("");
+      setNewQOptions(["", "", "", ""]);
+      setNewQCorrect("");
+      setNewQExplanation("");
+      setAddingQuestion(false);
+      await loadQuizForLesson(selectedLesson.id);
+    } catch (err: any) {
+      alert("Gagal menambah soal: " + err.message);
+    }
+  };
+
+  // Update existing question
+  const handleUpdateQuestion = async (questionId: string) => {
+    if (!editingQuestionId) return;
+    if (editQText.trim().length < 5) {
+      alert("Pertanyaan kuis minimal harus 5 karakter.");
+      return;
+    }
+    const activeOptions = editQOptions.filter(o => o.trim());
+    if (activeOptions.length < 2) {
+      alert("Minimal 2 pilihan jawaban diperlukan.");
+      return;
+    }
+    if (!editQCorrect.trim()) {
+      alert("Pilih jawaban yang benar terlebih dahulu.");
+      return;
+    }
+    try {
+      await api.put(`/api/admin/quiz-questions/${questionId}`, {
+        text: editQText,
+        options: activeOptions,
+        correctAnswer: editQCorrect,
+        explanation: editQExplanation || undefined,
+      });
+      setEditingQuestionId(null);
+      if (selectedLesson) await loadQuizForLesson(selectedLesson.id);
+    } catch (err: any) {
+      alert("Gagal menyimpan soal: " + err.message);
+    }
+  };
+
+  // Delete a question
+  const handleDeleteQuestion = async (questionId: string) => {
+    if (!confirm("Hapus soal ini?")) return;
+    try {
+      await api.delete(`/api/admin/quiz-questions/${questionId}`);
+      if (selectedLesson) await loadQuizForLesson(selectedLesson.id);
+    } catch (err: any) {
+      alert("Gagal menghapus soal: " + err.message);
+    }
+  };
+
+  // Save coding lab starter code
+  const handleSaveCodingContent = async () => {
+    if (!selectedLesson || !selectedCourse) return;
+    try {
+      await api.put(`/api/admin/lessons/${selectedLesson.id}`, {
+        title: wysiwygTitle,
+        contentBody: codingStarterCode,
+      });
+      setSaveSuccess(true);
+      setTimeout(() => setSaveSuccess(false), 2000);
+      reloadSelectedCourse(selectedCourse.id, selectedLesson.id);
+    } catch (err: any) {
+      alert("Gagal menyimpan Lab Code: " + err.message);
+    }
+  };
+
+  // Run coding lab starter code preview
+  const handleRunCodingPreview = async () => {
+    setCodingRunning(true);
+    setCodingOutput("");
+    setCodingError("");
+    setCodingPlots([]);
+    setCodingExecutionTime(undefined);
+    try {
+      const res = await api.post("/api/code/run", { code: codingStarterCode });
+      const runResult = res.data;
+      setCodingOutput(runResult.output || (runResult.error ? "" : "Program dieksekusi dengan sukses tanpa output konsol."));
+      setCodingError(runResult.error || "");
+      setCodingPlots(runResult.plots || []);
+      setCodingExecutionTime(runResult.executionTime);
+    } catch (err: any) {
+      console.error("Gagal eksekusi kode preview:", err);
+      setCodingError(err.message || "Gagal menghubungkan ke container sandbox.");
+    } finally {
+      setCodingRunning(false);
     }
   };
 
@@ -583,54 +823,469 @@ export default function AdminCoursesCMSPage() {
                       )}
 
                       {/* Content Workspace Area */}
-                      {editorMode === "edit" ? (
-                        <textarea
-                          value={wysiwygContent}
-                          onChange={(e) => setWysiwygContent(e.target.value)}
-                          placeholder="Mulai ketik deskripsi, kode program, kuis, atau instruksi materi Anda disini..."
-                          rows={10}
-                          className="w-full rounded-2xl border border-slate-200 bg-slate-50/30 p-4 text-xs font-semibold outline-none focus:border-indigo-500 dark:border-slate-800 dark:bg-slate-950 dark:text-slate-350 font-mono"
-                        />
-                      ) : (
-                        <div className="w-full min-h-[220px] p-5 rounded-2xl border border-dashed border-slate-200 bg-slate-50/10 text-xs dark:border-slate-850 dark:bg-slate-950 whitespace-pre-wrap font-mono">
-                          {selectedLesson.type === "video" && (
-                            <div className="mb-4 aspect-video w-full rounded-xl bg-slate-950 overflow-hidden flex items-center justify-center text-slate-500 text-[10px] font-bold border border-slate-800">
-                              {wysiwygMediaUrl ? (
-                                <iframe
-                                  className="w-full h-full"
-                                  src={wysiwygMediaUrl.replace("watch?v=", "embed/")}
-                                  title={wysiwygTitle}
-                                  allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-                                  allowFullScreen
-                                ></iframe>
-                              ) : (
-                                <span>📹 Pemutar Video Pembelajaran (Belum ada URL video)</span>
+                      {selectedLesson.type === "quiz" ? (
+                        <div className="space-y-6">
+                          {/* Quiz General Settings Card */}
+                          <div className="rounded-2xl border border-slate-200 bg-slate-50/50 p-4 dark:border-slate-800 dark:bg-slate-950/40 space-y-4">
+                            <h4 className="text-xs font-bold text-slate-800 dark:text-slate-200 uppercase tracking-wider flex items-center gap-1.5">
+                              <Award className="h-4 w-4 text-indigo-500" /> Pengaturan Kuis
+                            </h4>
+                            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                              <div>
+                                <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider dark:text-slate-450">Judul Kuis</label>
+                                <input
+                                  type="text"
+                                  value={quizTitle}
+                                  onChange={(e) => setQuizTitle(e.target.value)}
+                                  placeholder="Nama Kuis..."
+                                  className="mt-1.5 w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-semibold outline-none focus:border-indigo-500 dark:border-slate-800 dark:bg-slate-900 dark:text-white"
+                                />
+                              </div>
+                              <div>
+                                <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider dark:text-slate-450">Skor Kelulusan (%)</label>
+                                <input
+                                  type="number"
+                                  min="1"
+                                  max="100"
+                                  value={quizPassingScore}
+                                  onChange={(e) => setQuizPassingScore(parseInt(e.target.value) || 60)}
+                                  className="mt-1.5 w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-semibold outline-none focus:border-indigo-500 dark:border-slate-800 dark:bg-slate-900 dark:text-white"
+                                />
+                              </div>
+                              <div>
+                                <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider dark:text-slate-450">Batas Waktu (detik, 0=tanpa batas)</label>
+                                <input
+                                  type="number"
+                                  min="0"
+                                  value={quizTimeLimit}
+                                  onChange={(e) => setQuizTimeLimit(parseInt(e.target.value) || 0)}
+                                  className="mt-1.5 w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-semibold outline-none focus:border-indigo-500 dark:border-slate-800 dark:bg-slate-900 dark:text-white"
+                                />
+                              </div>
+                            </div>
+                            <div className="flex justify-end">
+                              <button
+                                onClick={handleSaveQuizSettings}
+                                className="rounded-xl bg-indigo-600 px-4 py-2 text-[10.5px] font-bold text-white hover:bg-indigo-550 transition shadow-sm flex items-center gap-1.5 cursor-pointer"
+                              >
+                                <Save className="h-3.5 w-3.5" /> Simpan Pengaturan
+                              </button>
+                            </div>
+                          </div>
+
+                          {/* Questions List & Add Form Card */}
+                          <div className="space-y-4">
+                            <div className="flex items-center justify-between border-b border-slate-100 pb-3 dark:border-slate-800">
+                              <h4 className="text-xs font-extrabold text-slate-900 dark:text-white uppercase tracking-wider">
+                                Soal Kuis ({quizQuestions.length})
+                              </h4>
+                              {!addingQuestion && (
+                                <button
+                                  onClick={() => {
+                                    setNewQText("");
+                                    setNewQOptions(["", "", "", ""]);
+                                    setNewQCorrect("");
+                                    setNewQExplanation("");
+                                    setAddingQuestion(true);
+                                  }}
+                                  className="rounded-xl bg-indigo-50 text-indigo-600 px-3 py-1.5 text-[10.5px] font-bold hover:bg-indigo-100 transition flex items-center gap-1 cursor-pointer dark:bg-slate-800 dark:text-indigo-300"
+                                >
+                                  <Plus className="h-3.5 w-3.5" /> Tambah Soal
+                                </button>
                               )}
                             </div>
-                          )}
-                          <div className="prose prose-sm dark:prose-invert">
-                            <h4 className="text-sm font-extrabold mb-2">{wysiwygTitle}</h4>
-                            <p className="whitespace-pre-wrap leading-relaxed text-slate-650 dark:text-slate-400">{wysiwygContent}</p>
+
+                            {/* Add Question Form */}
+                            {addingQuestion && (
+                              <div className="rounded-2xl border border-slate-200 bg-white p-4 dark:border-slate-800 dark:bg-slate-950 space-y-4 shadow-sm">
+                                <h5 className="text-[10px] font-extrabold text-slate-800 dark:text-slate-200 uppercase tracking-widest">Tambah Soal Baru</h5>
+                                <div className="space-y-3">
+                                  <div>
+                                    <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider dark:text-slate-450">Pertanyaan</label>
+                                    <textarea
+                                      value={newQText}
+                                      onChange={(e) => setNewQText(e.target.value)}
+                                      placeholder="Ketik pertanyaan kuis..."
+                                      rows={2}
+                                      className="mt-1.5 w-full rounded-xl border border-slate-200 bg-slate-50/50 px-3.5 py-2 text-xs font-semibold outline-none focus:border-indigo-500 dark:border-slate-800 dark:bg-slate-900 dark:text-white"
+                                    />
+                                  </div>
+
+                                  <div className="space-y-2">
+                                    <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider dark:text-slate-450">
+                                      Pilihan Jawaban (Pilih Bulatan untuk Kunci Jawaban)
+                                    </label>
+                                    {[0, 1, 2, 3].map((idx) => (
+                                      <div key={idx} className="flex items-center gap-2">
+                                        <input
+                                          type="radio"
+                                          name="newQCorrectRadio"
+                                          checked={newQCorrect === newQOptions[idx] && newQOptions[idx] !== ""}
+                                          onChange={() => {
+                                            if (newQOptions[idx].trim()) {
+                                              setNewQCorrect(newQOptions[idx]);
+                                            } else {
+                                              alert("Tulis opsi terlebih dahulu sebelum memilihnya sebagai kunci jawaban.");
+                                            }
+                                          }}
+                                          className="h-4 w-4 text-indigo-600 border-slate-350 focus:ring-indigo-500 cursor-pointer dark:border-slate-700"
+                                        />
+                                        <input
+                                          type="text"
+                                          value={newQOptions[idx]}
+                                          onChange={(e) => {
+                                            const updated = [...newQOptions];
+                                            updated[idx] = e.target.value;
+                                            setNewQOptions(updated);
+                                            if (newQCorrect === newQOptions[idx] && e.target.value.trim()) {
+                                              setNewQCorrect(e.target.value);
+                                            }
+                                          }}
+                                          placeholder={`Opsi Pilihan ${idx + 1}`}
+                                          className="flex-1 rounded-xl border border-slate-200 bg-slate-50/50 px-3.5 py-2 text-xs font-semibold outline-none focus:border-indigo-500 dark:border-slate-800 dark:bg-slate-900 dark:text-white"
+                                        />
+                                      </div>
+                                    ))}
+                                  </div>
+
+                                  <div>
+                                    <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider dark:text-slate-450">Penjelasan Pembahasan (Opsional)</label>
+                                    <textarea
+                                      value={newQExplanation}
+                                      onChange={(e) => setNewQExplanation(e.target.value)}
+                                      placeholder="Penjelasan kenapa jawaban tersebut benar..."
+                                      rows={2}
+                                      className="mt-1.5 w-full rounded-xl border border-slate-200 bg-slate-50/50 px-3.5 py-2 text-xs font-semibold outline-none focus:border-indigo-500 dark:border-slate-800 dark:bg-slate-900 dark:text-white"
+                                    />
+                                  </div>
+                                </div>
+
+                                <div className="flex justify-end gap-2 pt-1">
+                                  <button
+                                    onClick={() => setAddingQuestion(false)}
+                                    className="rounded-xl border border-slate-200 px-4 py-2 text-[10.5px] font-bold text-slate-655 hover:bg-slate-50 dark:border-slate-850 dark:text-slate-400 dark:hover:bg-slate-900 cursor-pointer"
+                                  >
+                                    Batal
+                                  </button>
+                                  <button
+                                    onClick={handleAddQuestion}
+                                    className="rounded-xl bg-indigo-600 px-4 py-2 text-[10.5px] font-bold text-white hover:bg-indigo-550 transition shadow-sm cursor-pointer"
+                                  >
+                                    Simpan Soal
+                                  </button>
+                                </div>
+                              </div>
+                            )}
+
+                            {/* Questions List */}
+                            <div className="space-y-4">
+                              {quizQuestions.length === 0 ? (
+                                <div className="text-center py-10 border border-dashed border-slate-200 rounded-2xl dark:border-slate-800 text-[11px] font-semibold text-slate-400">
+                                  Belum ada soal kuis. Silakan tambahkan beberapa soal.
+                                </div>
+                              ) : (
+                                quizQuestions.map((q, qIdx) => (
+                                  <div
+                                    key={q.id}
+                                    className="rounded-2xl border border-slate-200 bg-white p-4 dark:border-slate-800 dark:bg-slate-950 space-y-3 shadow-sm"
+                                  >
+                                    {editingQuestionId === q.id ? (
+                                      // Inline Edit Question Form
+                                      <div className="space-y-3">
+                                        <h5 className="text-[10px] font-bold text-slate-550 dark:text-indigo-300 uppercase tracking-wider">
+                                          Edit Soal #{qIdx + 1}
+                                        </h5>
+                                        <div>
+                                          <textarea
+                                            value={editQText}
+                                            onChange={(e) => setEditQText(e.target.value)}
+                                            rows={2}
+                                            className="w-full rounded-xl border border-slate-200 bg-slate-50/50 px-3.5 py-2 text-xs font-semibold outline-none focus:border-indigo-500 dark:border-slate-800 dark:bg-slate-900 dark:text-white"
+                                          />
+                                        </div>
+                                        <div className="space-y-2">
+                                          {[0, 1, 2, 3].map((idx) => (
+                                            <div key={idx} className="flex items-center gap-2">
+                                              <input
+                                                type="radio"
+                                                name="editQCorrectRadio"
+                                                checked={editQCorrect === editQOptions[idx] && editQOptions[idx] !== ""}
+                                                onChange={() => {
+                                                  if (editQOptions[idx].trim()) {
+                                                    setEditQCorrect(editQOptions[idx]);
+                                                  } else {
+                                                    alert("Tulis opsi terlebih dahulu sebelum memilihnya sebagai kunci jawaban.");
+                                                  }
+                                                }}
+                                                className="h-4 w-4 text-indigo-600 border-slate-350 focus:ring-indigo-500 cursor-pointer dark:border-slate-700"
+                                              />
+                                              <input
+                                                type="text"
+                                                value={editQOptions[idx] || ""}
+                                                onChange={(e) => {
+                                                  const updated = [...editQOptions];
+                                                  updated[idx] = e.target.value;
+                                                  setEditQOptions(updated);
+                                                  if (editQCorrect === editQOptions[idx] && e.target.value.trim()) {
+                                                    setEditQCorrect(e.target.value);
+                                                  }
+                                                }}
+                                                placeholder={`Opsi Pilihan ${idx + 1}`}
+                                                className="flex-1 rounded-xl border border-slate-200 bg-slate-50/50 px-3.5 py-2 text-xs font-semibold outline-none focus:border-indigo-500 dark:border-slate-800 dark:bg-slate-900 dark:text-white"
+                                              />
+                                            </div>
+                                          ))}
+                                        </div>
+                                        <div>
+                                          <textarea
+                                            value={editQExplanation}
+                                            onChange={(e) => setEditQExplanation(e.target.value)}
+                                            placeholder="Penjelasan pembahasan..."
+                                            rows={2}
+                                            className="w-full rounded-xl border border-slate-200 bg-slate-50/50 px-3.5 py-2 text-xs font-semibold outline-none focus:border-indigo-500 dark:border-slate-800 dark:bg-slate-900 dark:text-white"
+                                          />
+                                        </div>
+                                        <div className="flex justify-end gap-2">
+                                          <button
+                                            onClick={() => setEditingQuestionId(null)}
+                                            className="rounded-xl border border-slate-200 px-3 py-1.5 text-[10px] font-bold text-slate-600 hover:bg-slate-50 dark:border-slate-850 dark:text-slate-400 dark:hover:bg-slate-900 cursor-pointer"
+                                          >
+                                            Batal
+                                          </button>
+                                          <button
+                                            onClick={() => handleUpdateQuestion(q.id)}
+                                            className="rounded-xl bg-indigo-650 px-3 py-1.5 text-[10px] font-bold text-white hover:bg-indigo-600 cursor-pointer"
+                                          >
+                                            Simpan
+                                          </button>
+                                        </div>
+                                      </div>
+                                    ) : (
+                                      // Render Question Block
+                                      <>
+                                        <div className="flex justify-between items-start gap-3">
+                                          <h5 className="text-[11px] font-bold text-slate-805 dark:text-slate-200 leading-relaxed">
+                                            <span className="font-extrabold text-indigo-500">Soal {qIdx + 1}:</span> {q.text}
+                                          </h5>
+                                          <div className="flex gap-1 shrink-0">
+                                            <button
+                                              onClick={() => {
+                                                setEditingQuestionId(q.id);
+                                                setEditQText(q.text);
+                                                const opts = [...(q.options || [])];
+                                                while (opts.length < 4) opts.push("");
+                                                setEditQOptions(opts);
+                                                setEditQCorrect(q.correctAnswer);
+                                                setEditQExplanation(q.explanation || "");
+                                              }}
+                                              className="flex h-6 w-6 items-center justify-center text-slate-400 hover:text-indigo-600 hover:bg-slate-50 dark:hover:bg-slate-850 rounded"
+                                            >
+                                              <Edit3 className="h-3 w-3" />
+                                            </button>
+                                            <button
+                                              onClick={() => handleDeleteQuestion(q.id)}
+                                              className="flex h-6 w-6 items-center justify-center text-slate-400 hover:text-rose-600 hover:bg-slate-50 dark:hover:bg-slate-850 rounded"
+                                            >
+                                              <Trash2 className="h-3 w-3" />
+                                            </button>
+                                          </div>
+                                        </div>
+
+                                        <div className="grid grid-cols-1 md:grid-cols-2 gap-2 mt-2">
+                                          {q.options?.map((opt: string, optIdx: number) => {
+                                            const isCorrect = opt === q.correctAnswer;
+                                            return (
+                                              <div
+                                                key={optIdx}
+                                                className={`p-2.5 rounded-xl border text-[11px] font-semibold flex items-center gap-2 ${
+                                                  isCorrect
+                                                    ? "border-emerald-250 bg-emerald-50/50 text-emerald-800 dark:border-emerald-950/30 dark:bg-emerald-950/20 dark:text-emerald-300"
+                                                    : "border-slate-150 bg-slate-50/20 text-slate-600 dark:border-slate-850 dark:bg-slate-900/50 dark:text-slate-400"
+                                                }`}
+                                              >
+                                                <span
+                                                  className={`flex h-4 w-4 shrink-0 items-center justify-center rounded-full text-[9px] font-extrabold ${
+                                                    isCorrect
+                                                      ? "bg-emerald-500 text-white"
+                                                      : "bg-slate-200 text-slate-500 dark:bg-slate-800"
+                                                  }`}
+                                                >
+                                                  {String.fromCharCode(65 + optIdx)}
+                                                </span>
+                                                <span className="truncate">{opt}</span>
+                                                {isCorrect && <Check className="h-3 w-3 text-emerald-500 ml-auto shrink-0" />}
+                                              </div>
+                                            );
+                                          })}
+                                        </div>
+
+                                        {q.explanation && (
+                                          <div className="p-2.5 rounded-xl bg-slate-50 border border-slate-150 text-[10px] text-slate-500 leading-relaxed font-semibold dark:bg-slate-900 dark:border-slate-850 dark:text-slate-400">
+                                            <span className="font-extrabold text-indigo-500 uppercase tracking-wider block mb-0.5">Penjelasan Pembahasan:</span>
+                                            {q.explanation}
+                                          </div>
+                                        )}
+                                      </>
+                                    )}
+                                  </div>
+                                ))
+                              )}
+                            </div>
                           </div>
                         </div>
-                      )}
+                      ) : selectedLesson.type === "coding" ? (
+                        // Coding Lab Editor UI
+                        <div className="grid grid-cols-1 xl:grid-cols-12 gap-6 items-start">
+                          {/* Code Editor Panel */}
+                          <div className="xl:col-span-7 space-y-4">
+                            <div className="flex items-center justify-between">
+                              <h4 className="text-xs font-bold text-slate-800 dark:text-slate-200 uppercase tracking-wider flex items-center gap-1.5">
+                                <Code2 className="h-4 w-4 text-indigo-500" /> Script Python Starter
+                              </h4>
+                              <span className="text-[10px] font-extrabold text-slate-400 uppercase tracking-widest">Editor Mode</span>
+                            </div>
 
-                      {/* Save Footer Bar */}
-                      <div className="flex items-center justify-between pt-2">
-                        <div className="flex items-center gap-2">
-                          {saveSuccess && (
-                            <span className="text-[10px] font-bold text-emerald-650 bg-emerald-50 px-3 py-1 rounded-lg flex items-center gap-1">
-                              <Check className="h-3.5 w-3.5" /> Perubahan disimpan!
-                            </span>
-                          )}
+                            <div className="border border-slate-200 dark:border-slate-850 rounded-2xl overflow-hidden bg-slate-950">
+                              <CodeMirrorEditor
+                                value={codingStarterCode}
+                                extensions={[python()]}
+                                theme={oneDark}
+                                onChange={(val) => setCodingStarterCode(val)}
+                                basicSetup={{ lineNumbers: true, foldGutter: false, highlightActiveLine: true }}
+                                style={{ fontSize: 12 }}
+                              />
+                            </div>
+
+                            <div className="flex items-center justify-between pt-2">
+                              <button
+                                onClick={handleRunCodingPreview}
+                                disabled={codingRunning}
+                                className="rounded-xl border border-indigo-200 text-indigo-600 bg-indigo-50/20 dark:border-indigo-900 dark:text-indigo-400 dark:bg-indigo-950/20 px-4 py-2.5 text-xs font-extrabold hover:bg-indigo-50 hover:text-indigo-755 dark:hover:bg-indigo-950 transition flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
+                              >
+                                {codingRunning ? (
+                                  <>
+                                    <span className="animate-spin text-[10px]">⏳</span> Menjalankan...
+                                  </>
+                                ) : (
+                                  <>
+                                    <span>▶</span> Jalankan Preview
+                                  </>
+                                )}
+                              </button>
+
+                              <button
+                                onClick={handleSaveCodingContent}
+                                className="rounded-xl bg-indigo-600 hover:bg-indigo-550 transition text-white px-5 py-2.5 text-xs font-extrabold shadow-md flex items-center gap-1.5 cursor-pointer"
+                              >
+                                <Save className="h-4 w-4" /> Simpan Starter Code
+                              </button>
+                            </div>
+                          </div>
+
+                          {/* Preview Output Panel */}
+                          <div className="xl:col-span-5 space-y-4">
+                            <h4 className="text-xs font-bold text-slate-800 dark:text-slate-200 uppercase tracking-wider flex items-center gap-1.5">
+                              <Eye className="h-4 w-4 text-emerald-500" /> Hasil Preview
+                            </h4>
+
+                            <div className="min-h-[200px] rounded-2xl border border-slate-200 bg-slate-950 p-4 font-mono text-[11px] flex flex-col justify-between dark:border-slate-850 overflow-x-auto">
+                              {codingRunning ? (
+                                <div className="flex flex-col items-center justify-center py-12 text-slate-400 space-y-2">
+                                  <span className="animate-spin text-lg">⏳</span>
+                                  <span className="font-sans font-bold text-[10px] uppercase tracking-wider">Menjalankan kode Python di sandbox container...</span>
+                                </div>
+                              ) : !codingOutput && !codingError && codingPlots.length === 0 ? (
+                                <div className="text-slate-500 py-12 text-center font-sans font-semibold">
+                                  Klik "Jalankan Preview" untuk melihat output eksekusi program.
+                                </div>
+                              ) : (
+                                <div className="space-y-4">
+                                  {codingOutput && (
+                                    <div className="space-y-1">
+                                      <span className="text-[9px] font-sans font-bold text-slate-550 uppercase tracking-widest block">Standard Output:</span>
+                                      <pre className="text-emerald-450 whitespace-pre-wrap leading-relaxed">{codingOutput}</pre>
+                                    </div>
+                                  )}
+
+                                  {codingError && (
+                                    <div className="space-y-1">
+                                      <span className="text-[9px] font-sans font-bold text-rose-500 uppercase tracking-widest block">Standard Error / traceback:</span>
+                                      <pre className="text-rose-400 whitespace-pre-wrap leading-relaxed">{codingError}</pre>
+                                    </div>
+                                  )}
+
+                                  {codingPlots.map((plot, idx) => (
+                                    <div key={idx} className="space-y-1">
+                                      <span className="text-[9px] font-sans font-bold text-indigo-400 uppercase tracking-widest block">Matplotlib Output Plot {idx + 1}:</span>
+                                      <div className="bg-white p-2 rounded-xl border border-slate-800 flex justify-center">
+                                        <img src={plot} alt={`Plot ${idx + 1}`} className="max-w-full h-auto object-contain rounded" />
+                                      </div>
+                                    </div>
+                                  ))}
+
+                                  {codingExecutionTime !== undefined && (
+                                    <div className="text-[9px] font-sans font-bold text-slate-550 tracking-wider text-right border-t border-slate-900 pt-2">
+                                      Waktu Eksekusi: {codingExecutionTime.toFixed(3)}s
+                                    </div>
+                                  )}
+                                </div>
+                              )}
+                            </div>
+                          </div>
                         </div>
-                        <button
-                          onClick={handleSaveLessonContent}
-                          className="rounded-2xl bg-indigo-600 px-5 py-2.5 text-xs font-bold text-white hover:bg-indigo-550 transition flex items-center gap-2"
-                        >
-                          <Save className="h-4 w-4" /> Simpan Materi
-                        </button>
-                      </div>
+                      ) : (
+                        // Existing Text/Video WYSIWYG Content Editor UI
+                        <>
+                          {editorMode === "edit" ? (
+                            <textarea
+                              value={wysiwygContent}
+                              onChange={(e) => setWysiwygContent(e.target.value)}
+                              placeholder="Mulai ketik deskripsi, kode program, kuis, atau instruksi materi Anda disini..."
+                              rows={10}
+                              className="w-full rounded-2xl border border-slate-200 bg-slate-50/30 p-4 text-xs font-semibold outline-none focus:border-indigo-500 dark:border-slate-800 dark:bg-slate-950 dark:text-slate-350 font-mono"
+                            />
+                          ) : (
+                            <div className="w-full min-h-[220px] p-5 rounded-2xl border border-dashed border-slate-200 bg-slate-50/10 text-xs dark:border-slate-850 dark:bg-slate-950 whitespace-pre-wrap font-mono">
+                              {selectedLesson.type === "video" && (
+                                <div className="mb-4 aspect-video w-full rounded-xl bg-slate-950 overflow-hidden flex items-center justify-center text-slate-500 text-[10px] font-bold border border-slate-800">
+                                  {wysiwygMediaUrl ? (
+                                    <iframe
+                                      className="w-full h-full"
+                                      src={wysiwygMediaUrl.replace("watch?v=", "embed/")}
+                                      title={wysiwygTitle}
+                                      allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                                      allowFullScreen
+                                    ></iframe>
+                                  ) : (
+                                    <span>📹 Pemutar Video Pembelajaran (Belum ada URL video)</span>
+                                  )}
+                                </div>
+                              )}
+                              <div className="prose prose-sm dark:prose-invert">
+                                <h4 className="text-sm font-extrabold mb-2">{wysiwygTitle}</h4>
+                                <p className="whitespace-pre-wrap leading-relaxed text-slate-650 dark:text-slate-400">{wysiwygContent}</p>
+                              </div>
+                            </div>
+                          )}
+
+                          {/* Save Footer Bar */}
+                          <div className="flex items-center justify-between pt-2">
+                            <div className="flex items-center gap-2">
+                              {saveSuccess && (
+                                <span className="text-[10px] font-bold text-emerald-650 bg-emerald-50 px-3 py-1 rounded-lg flex items-center gap-1">
+                                  <Check className="h-3.5 w-3.5" /> Perubahan disimpan!
+                                </span>
+                              )}
+                            </div>
+                            <button
+                              onClick={handleSaveLessonContent}
+                              className="rounded-2xl bg-indigo-600 px-5 py-2.5 text-xs font-bold text-white hover:bg-indigo-550 transition flex items-center gap-2"
+                            >
+                              <Save className="h-4 w-4" /> Simpan Materi
+                            </button>
+                          </div>
+                        </>
+                      )}
 
                     </div>
                   ) : (

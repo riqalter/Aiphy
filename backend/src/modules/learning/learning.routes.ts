@@ -41,9 +41,9 @@ export const learningRoutes = new Elysia()
 
   // 3. Get quiz questions (public/learner facing - correct answers hidden)
   .get(
-    '/api/quiz/:quizId',
+    '/api/quiz/:lessonId',
     async ({ params }) => {
-      const quiz = await LearningService.getQuiz(params.quizId);
+      const quiz = await LearningService.getQuiz(params.lessonId);
       return {
         success: true,
         data: quiz,
@@ -51,16 +51,16 @@ export const learningRoutes = new Elysia()
     },
     {
       params: t.Object({
-        quizId: t.String(),
+        lessonId: t.String(),
       }),
     }
   )
 
   // 4. Submit quiz answers for grading and AI feedback
   .post(
-    '/api/quiz/:quizId/submit',
+    '/api/quiz/:lessonId/submit',
     async ({ user, params, body }) => {
-      const result = await LearningService.submitQuiz(user!.id, params.quizId, body.answers);
+      const result = await LearningService.submitQuiz(user!.id, params.lessonId, body.answers);
       return {
         success: true,
         message: 'Quiz submitted successfully',
@@ -69,7 +69,7 @@ export const learningRoutes = new Elysia()
     },
     {
       params: t.Object({
-        quizId: t.String(),
+        lessonId: t.String(),
       }),
       body: t.Object({
         answers: t.Record(t.String(), t.String(), {
@@ -79,7 +79,24 @@ export const learningRoutes = new Elysia()
     }
   )
 
-  // 5. Get user streak data
+  // 5. Get quiz attempt history for a lesson
+  .get(
+    '/api/quiz/:lessonId/attempts',
+    async ({ user, params }) => {
+      const result = await LearningService.getQuizAttempts(user!.id, params.lessonId);
+      return {
+        success: true,
+        data: result,
+      };
+    },
+    {
+      params: t.Object({
+        lessonId: t.String(),
+      }),
+    }
+  )
+
+  // 6. Get user streak data
   .get('/api/user/streak', async ({ user }) => {
     const streak = await LearningService.getUserStreak(user!.id);
     return {

@@ -4,7 +4,7 @@ import { Search, ShoppingBag, Bell, ChevronDown, User, LogOut, Settings, Sparkle
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState, useEffect } from "react";
-import { getCurrentUser, clearTokens } from "@/app/lib/api";
+import { getCurrentUser, clearTokens, api } from "@/app/lib/api";
 
 interface HeaderProps {
   userName?: string;
@@ -20,10 +20,56 @@ export default function Header({
   const [showNotif, setShowNotif] = useState(false);
   const [showCart, setShowCart] = useState(false);
   const [profile, setProfile] = useState<any>(null);
+  
+  // Real notifications states
+  const [notifications, setNotifications] = useState<any[]>([]);
+  const [unreadCount, setUnreadCount] = useState(0);
+
+  const fetchNotifications = async () => {
+    try {
+      const res = await api.get("/api/notifications");
+      if (res?.data?.success) {
+        const list = res.data.data || [];
+        setNotifications(list);
+        setUnreadCount(list.filter((n: any) => !n.isRead).length);
+      }
+    } catch (err) {
+      console.error("Gagal mengambil notifikasi:", err);
+    }
+  };
 
   useEffect(() => {
     setProfile(getCurrentUser());
+    fetchNotifications();
+    const interval = setInterval(fetchNotifications, 20000);
+    return () => clearInterval(interval);
   }, []);
+
+  const handleMarkAsRead = async (notifId: string) => {
+    try {
+      await api.put(`/api/notifications/${notifId}/read`);
+      setNotifications((prev) =>
+        prev.map((n) => (n.id === notifId ? { ...n, isRead: true } : n))
+      );
+      setUnreadCount((prev) => Math.max(0, prev - 1));
+    } catch (err) {
+      console.error("Gagal menandai dibaca:", err);
+    }
+  };
+
+  const formatNotifTime = (dateStr: string) => {
+    const now = new Date();
+    const date = new Date(dateStr);
+    const diffMs = now.getTime() - date.getTime();
+    const diffMins = Math.floor(diffMs / (1000 * 60));
+    const diffHours = Math.floor(diffMs / (1000 * 60 * 60));
+    const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
+
+    if (diffMins < 1) return "Baru saja";
+    if (diffMins < 60) return `${diffMins} menit yang lalu`;
+    if (diffHours < 24) return `${diffHours} jam yang lalu`;
+    return `${diffDays} hari yang lalu`;
+  };
 
   const displayUserName = userName || profile?.name || "Learner";
 
@@ -37,12 +83,6 @@ export default function Header({
   };
 
   const initials = getInitials(displayUserName);
-
-  const mockNotifications = [
-    { id: 1, text: "🔥 Streak belajar Anda mencapai 5 hari! Pertahankan!", time: "2 jam yang lalu" },
-    { id: 2, text: "📚 Modul Baru: Prompt Engineering telah diterbitkan.", time: "1 hari yang lalu" },
-    { id: 3, text: "📝 Nilai Kuis Matematika AI Anda: Lulus (A+)", time: "2 hari yang lalu" }
-  ];
 
   const mockCartItems = [
     { id: 1, title: "Algoritma Machine Learning", price: "Rp520.000" },
@@ -105,28 +145,65 @@ export default function Header({
             )}
           </div>
 
-          {/* Notifications */}
+           {/* Notifications */}
           <div className="relative">
             <button 
               onClick={() => { setShowNotif(!showNotif); setShowCart(false); setShowProfile(false); }}
               className="relative flex h-11 w-11 items-center justify-center rounded-2xl border border-slate-200 bg-white text-slate-600 transition-colors hover:bg-slate-50 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-300 dark:hover:bg-slate-800 cursor-pointer"
             >
               <Bell className="h-5 w-5" />
-              <span className="absolute -top-1 -right-1 flex h-5 w-5 items-center justify-center rounded-full bg-indigo-600 text-[10px] font-bold text-white ring-2 ring-white dark:ring-slate-900">
-                3
-              </span>
+              {unreadCount > 0 && (
+                <span className="absolute -top-1 -right-1 flex h-5 w-5 items-center justify-center rounded-full bg-indigo-600 text-[10px] font-bold text-white ring-2 ring-white dark:ring-slate-900 animate-pulse">
+                  {unreadCount}
+                </span>
+              )}
             </button>
 
             {showNotif && (
               <div className="absolute right-0 mt-2 w-80 rounded-2xl border border-slate-200 bg-white p-4 shadow-xl dark:border-slate-800 dark:bg-slate-900 z-50">
-                <h4 className="text-xs font-bold text-slate-900 dark:text-white border-b border-slate-100 dark:border-slate-800 pb-2">Pemberitahuan</h4>
-                <div className="mt-2 space-y-3">
-                  {mockNotifications.map((notif) => (
-                    <div key={notif.id} className="text-xs leading-normal">
-                      <p className="text-slate-850 dark:text-slate-200">{notif.text}</p>
-                      <span className="text-[10px] text-slate-400 block mt-0.5">{notif.time}</span>
+                <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-2 mb-2">
+                  <h4 className="text-xs font-bold text-slate-900 dark:text-white">Pemberitahuan</h4>
+                  {unreadCount > 0 && (
+                    <button
+                      onClick={async () => {
+                        try {
+                          await api.put("/api/notifications/read-all");
+                          setNotifications((prev) => prev.map((n) => ({ ...n, isRead: true })));
+                          setUnreadCount(0);
+                        } catch (err) {
+                          console.error("Gagal menandai semua dibaca:", err);
+                        }
+                      }}
+                      className="text-[10px] font-bold text-indigo-600 hover:underline dark:text-indigo-400"
+                    >
+                      Tandai semua dibaca
+                    </button>
+                  )}
+                </div>
+                <div className="mt-2 max-h-60 overflow-y-auto space-y-2">
+                  {notifications.length === 0 ? (
+                    <div className="text-center py-6 text-slate-400 text-[11px] font-semibold">
+                      Belum ada pemberitahuan baru.
                     </div>
-                  ))}
+                  ) : (
+                    notifications.map((notif) => (
+                      <div 
+                        key={notif.id} 
+                        onClick={() => handleMarkAsRead(notif.id)}
+                        className={`text-xs leading-normal p-2 rounded-xl transition cursor-pointer ${
+                          notif.isRead 
+                            ? "opacity-60 hover:bg-slate-50 dark:hover:bg-slate-850/30" 
+                            : "bg-indigo-50/20 font-bold hover:bg-indigo-50/40 dark:bg-indigo-950/10 dark:hover:bg-indigo-950/20"
+                        }`}
+                      >
+                        <p className="text-slate-850 dark:text-slate-200">
+                          {notif.type === "streak" ? "🔥 " : notif.type === "badge" ? "🏆 " : notif.type === "success" ? "✅ " : "📢 "}
+                          {notif.message}
+                        </p>
+                        <span className="text-[10px] text-slate-400 block mt-0.5">{formatNotifTime(notif.createdAt)}</span>
+                      </div>
+                    ))
+                  )}
                 </div>
               </div>
             )}

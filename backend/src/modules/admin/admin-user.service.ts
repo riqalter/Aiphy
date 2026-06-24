@@ -149,22 +149,69 @@ export class AdminUserService {
 
   static async updateUser(
     userId: string,
-    data: { name?: string; role?: 'learner' | 'instructor' | 'content_admin' | 'super_admin'; status?: 'active' | 'inactive' | 'suspended' }
+    data: { name?: string; role?: 'learner' | 'instructor' | 'content_admin' | 'super_admin'; status?: 'active' | 'inactive' | 'suspended'; planName?: 'Basic Learner' | 'Pro Learner' }
   ) {
-    const [updated] = await db
-      .update(users)
-      .set({
-        ...data,
-        updatedAt: new Date(),
-      })
-      .where(eq(users.id, userId))
-      .returning();
+    const { planName, ...userData } = data;
 
-    if (!updated) {
-      throw new NotFoundError('User not found');
-    }
+    return await db.transaction(async (tx) => {
+      let updatedUser = null;
+      if (Object.keys(userData).length > 0) {
+        const [res] = await tx
+          .update(users)
+          .set({
+            ...userData,
+            updatedAt: new Date(),
+          })
+          .where(eq(users.id, userId))
+          .returning();
+        updatedUser = res;
+      }
 
-    return updated;
+      if (planName) {
+        const [plan] = await tx
+          .select()
+          .from(subscriptionPlans)
+          .where(eq(subscriptionPlans.name, planName))
+          .limit(1);
+
+        if (!plan) {
+          throw new BadRequestError(`Plan '${planName}' not found`);
+        }
+
+        const [existingSub] = await tx
+          .select()
+          .from(userSubscriptions)
+          .where(eq(userSubscriptions.userId, userId))
+          .limit(1);
+
+        if (existingSub) {
+          await tx
+            .update(userSubscriptions)
+            .set({
+              planId: plan.id,
+              status: 'active',
+              expiresAt: new Date(Date.now() + 365 * 24 * 60 * 60 * 1000),
+            })
+            .where(eq(userSubscriptions.id, existingSub.id));
+        } else {
+          await tx.insert(userSubscriptions).values({
+            userId,
+            planId: plan.id,
+            status: 'active',
+            startedAt: new Date(),
+            expiresAt: new Date(Date.now() + 365 * 24 * 60 * 60 * 1000),
+          });
+        }
+      }
+
+      if (!updatedUser) {
+        const [user] = await tx.select().from(users).where(eq(users.id, userId)).limit(1);
+        if (!user) throw new NotFoundError('User not found');
+        return user;
+      }
+
+      return updatedUser;
+    });
   }
 
   static async deleteUser(userId: string) {

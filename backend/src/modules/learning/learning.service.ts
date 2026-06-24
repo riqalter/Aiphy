@@ -3,6 +3,7 @@ import { userProgress, quizzes, quizQuestions, quizAttempts, learningStreaks, ba
 import { courses, lessons, modules, courseEnrollments } from '../../db/schema/courses';
 import { eq, and, desc, sql } from 'drizzle-orm';
 import { NotFoundError, BadRequestError } from '../../lib/errors';
+import { llmClient, DEFAULT_MODEL } from '../ai/llm-client';
 
 export class LearningService {
   // --- STREAK LOGIC ---
@@ -154,9 +155,10 @@ export class LearningService {
 
   // --- QUIZ SYSTEM ---
 
-  static async getQuiz(quizId: string) {
+  // Lookup quiz by lessonId (frontend always passes lessonId as the quiz identifier)
+  static async getQuiz(lessonId: string) {
     const quiz = await db.query.quizzes.findFirst({
-      where: eq(quizzes.id, quizId),
+      where: eq(quizzes.lessonId, lessonId),
       with: {
         questions: {
           columns: {
@@ -169,22 +171,23 @@ export class LearningService {
     });
 
     if (!quiz) {
-      throw new NotFoundError('Quiz not found');
+      throw new NotFoundError('Quiz tidak ditemukan untuk pelajaran ini');
     }
 
     return quiz;
   }
 
-  static async submitQuiz(userId: string, quizId: string, userAnswers: Record<string, string>) {
+  static async submitQuiz(userId: string, lessonId: string, userAnswers: Record<string, string>) {
+    // Lookup quiz by lessonId (consistent with getQuiz)
     const quiz = await db.query.quizzes.findFirst({
-      where: eq(quizzes.id, quizId),
+      where: eq(quizzes.lessonId, lessonId),
       with: {
         questions: true,
         lesson: {
           with: {
-            module: true
-          }
-        }
+            module: true,
+          },
+        },
       },
     });
 
@@ -218,23 +221,64 @@ export class LearningService {
     const score = totalQuestions > 0 ? Math.round((correctCount / totalQuestions) * 100) : 0;
     const passed = score >= quiz.passingScore;
 
-    // Generate neat mock AI feedback (will be replaced by actual LLM in Fase 5)
-    let aiFeedback = `Kerja bagus! Anda menjawab ${correctCount} dari ${totalQuestions} pertanyaan dengan benar. `;
-    if (score === 100) {
-      aiFeedback += 'Sempurna! Anda memahami materi ini dengan sangat baik. Pertahankan prestasinya!';
-    } else if (passed) {
-      aiFeedback += 'Anda lulus kuis ini! Beberapa konsep memerlukan tinjauan kembali, terutama pada bagian penjelasan yang salah. Silakan lanjutkan ke modul berikutnya.';
-    } else {
-      aiFeedback += 'Sayangnya Anda belum mencapai batas kelulusan. Disarankan untuk membaca ulang materi pelajaran pada modul ini sebelum mencoba kembali.';
+    // Generate AI feedback using LLM
+    let aiFeedback = '';
+    try {
+      // Build per-question summary for LLM context
+      const questionsSummary = questionsFeedback
+        .map((q, i) =>
+          `Soal ${i + 1}: ${q.text}\nJawaban pengguna: ${q.userAnswer || '(tidak dijawab)'}\nJawaban benar: ${q.correctAnswer}\nStatus: ${q.isCorrect ? 'Benar' : 'Salah'}${q.explanation ? `\nPenjelasan: ${q.explanation}` : ''}`
+        )
+        .join('\n\n');
+
+      const systemPrompt = `Anda adalah tutor AI untuk platform pendidikan kecerdasan artifisial AIphy. 
+Berikan feedback yang memotivasi, spesifik, dan edukatif dalam Bahasa Indonesia untuk hasil kuis seorang pelajar.
+Feedback harus mencakup: apresiasi atas usaha, analisis singkat soal yang salah (jika ada), dan saran konkret untuk perbaikan.
+Gunakan bahasa yang ramah, tidak lebih dari 150 kata.`;
+
+      const userPrompt = `Pelajar baru saja menyelesaikan kuis "${quiz.title}".
+Skor: ${score}% (${correctCount} dari ${totalQuestions} benar)
+Status: ${passed ? 'LULUS' : 'TIDAK LULUS'} (batas lulus: ${quiz.passingScore}%)
+
+Detail per soal:
+${questionsSummary}
+
+Berikan feedback yang memotivasi dan edukatif.`;
+
+      const completion = await llmClient.chat.completions.create({
+        model: DEFAULT_MODEL,
+        messages: [
+          { role: 'system', content: systemPrompt },
+          { role: 'user', content: userPrompt },
+        ],
+        max_tokens: 300,
+        temperature: 0.7,
+      });
+
+      aiFeedback = completion.choices[0]?.message?.content?.trim() || '';
+    } catch (err) {
+      console.error('[LearningService] LLM feedback generation failed, using fallback:', err);
+    }
+
+    // Fallback jika LLM gagal
+    if (!aiFeedback) {
+      aiFeedback = `Anda menjawab ${correctCount} dari ${totalQuestions} pertanyaan dengan benar (${score}%). `;
+      if (score === 100) {
+        aiFeedback += 'Sempurna! Anda memahami materi ini dengan sangat baik. Pertahankan prestasinya!';
+      } else if (passed) {
+        aiFeedback += 'Anda lulus kuis ini! Tinjau kembali soal yang salah untuk memperdalam pemahaman.';
+      } else {
+        aiFeedback += 'Anda belum mencapai batas kelulusan. Baca ulang materi pada modul ini sebelum mencoba kembali.';
+      }
     }
 
     return await db.transaction(async (tx) => {
-      // Save attempt
+      // Save attempt (use quiz.id — the actual DB primary key of the quiz row)
       const [attempt] = await tx
         .insert(quizAttempts)
         .values({
           userId,
-          quizId,
+          quizId: quiz.id,
           score,
           answers: userAnswers,
           aiFeedback,
@@ -469,6 +513,48 @@ export class LearningService {
       // 2. Award course completion badge
       await this.checkAndAwardBadge(userId, 'course_complete', 1, tx);
     }
+  }
+
+  // --- QUIZ ATTEMPTS HISTORY ---
+
+  static async getQuizAttempts(userId: string, lessonId: string) {
+    // Lookup quiz by lessonId first
+    const quiz = await db.query.quizzes.findFirst({
+      where: eq(quizzes.lessonId, lessonId),
+      columns: { id: true, title: true, passingScore: true },
+    });
+
+    if (!quiz) {
+      throw new NotFoundError('Quiz tidak ditemukan untuk pelajaran ini');
+    }
+
+    const attempts = await db
+      .select({
+        id: quizAttempts.id,
+        score: quizAttempts.score,
+        aiFeedback: quizAttempts.aiFeedback,
+        answers: quizAttempts.answers,
+        startedAt: quizAttempts.startedAt,
+        completedAt: quizAttempts.completedAt,
+      })
+      .from(quizAttempts)
+      .where(
+        and(
+          eq(quizAttempts.userId, userId),
+          eq(quizAttempts.quizId, quiz.id)
+        )
+      )
+      .orderBy(desc(quizAttempts.completedAt))
+      .limit(10);
+
+    return {
+      quizTitle: quiz.title,
+      passingScore: quiz.passingScore,
+      attempts: attempts.map((a) => ({
+        ...a,
+        passed: a.score >= quiz.passingScore,
+      })),
+    };
   }
 
   // Helper function to check eligibility and award a badge
