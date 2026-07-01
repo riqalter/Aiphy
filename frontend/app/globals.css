@@ -5,11 +5,46 @@
   --foreground: #171717;
 }
 
-@theme inline {
+@theme {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
   --font-sans: var(--font-geist-sans);
   --font-mono: var(--font-geist-mono);
+
+  /* Custom Color Shades for AIphy Theme */
+  --color-slate-55: #f4f6fa;
+  --color-slate-150: #eaf0f6;
+  --color-slate-250: #d6e0ec;
+  --color-slate-350: #b3c3d5;
+  --color-slate-450: #7c8ba1;
+  --color-slate-505: #59687e;
+  --color-slate-550: #55657a;
+  --color-slate-650: #3c4a5c;
+  --color-slate-655: #384555;
+  --color-slate-750: #253141;
+  --color-slate-850: #162032;
+  --color-slate-855: #121a28;
+  --color-slate-905: #0a101d;
+  --color-slate-955: #060b14;
+  --color-slate-960: #010307;
+
+  --color-indigo-550: #5957ec;
+  --color-indigo-650: #4338ca;
+  --color-indigo-655: #3f33c6;
+  --color-indigo-750: #2b248a;
+  --color-indigo-955: #080624;
+
+  --color-emerald-250: #a7f3d0;
+  --color-emerald-450: #34d399;
+  --color-emerald-650: #047857;
+
+  --color-red-550: #e13434;
+  --color-red-650: #c51f1f;
+  --color-red-955: #450a0a;
+
+  --color-rose-955: #4c0519;
+
+  --color-pink-655: #db2777;
 }
 
 @media (prefers-color-scheme: dark) {

@@ -1,4 +1,7 @@
-const BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000';
+const BASE_URL = 
+  process.env.NEXT_PUBLIC_API_URL !== undefined 
+    ? process.env.NEXT_PUBLIC_API_URL 
+    : (typeof window !== 'undefined' ? '' : 'http://localhost:4000');
 
 interface RequestOptions extends RequestInit {
   body?: any;

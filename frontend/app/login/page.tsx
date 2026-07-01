@@ -118,7 +118,7 @@ export default function LoginPage() {
               <button
                 type="button"
                 onClick={() => {
-                  window.location.href = "http://localhost:4000/api/auth/google";
+                  window.location.href = "/api/auth/google";
                 }}
                 className="flex items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white py-2.5 text-xs font-semibold text-slate-700 hover:bg-slate-50 dark:border-slate-800 dark:bg-slate-950 dark:text-slate-300 w-full"
               >

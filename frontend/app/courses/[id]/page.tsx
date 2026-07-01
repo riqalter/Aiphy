@@ -114,6 +114,13 @@ export default function CourseDetailPage({ params }: { params: Promise<{ id: str
   const [chatInput, setChatInput] = useState("");
   const [sendingChat, setSendingChat] = useState(false);
 
+  const chatEndRef = useRef<HTMLDivElement>(null);
+
+  // Auto-scroll to bottom on new messages
+  useEffect(() => {
+    chatEndRef.current?.scrollIntoView({ behavior: "smooth" });
+  }, [chatMessages]);
+
   // Python Code Sandbox cells
   const [codeCells, setCodeCells] = useState<any[]>([]);
   const [initialCode, setInitialCode] = useState<string>("");
@@ -634,6 +641,7 @@ export default function CourseDetailPage({ params }: { params: Promise<{ id: str
                         )}
                       </div>
                     ))}
+                    <div ref={chatEndRef} />
                   </div>
 
                   {/* Message Input Panel */}

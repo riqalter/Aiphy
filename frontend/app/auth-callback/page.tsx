@@ -20,7 +20,7 @@ function CallbackHandler() {
       }
 
       if (!accessToken || !refreshToken) {
-        router.push('/login?error=oauth_failed');
+        router.push(`/login?error=oauth_failed&msg=${encodeURIComponent("Tokens missing in callback URL")}`);
         return;
       }
 
@@ -34,9 +34,10 @@ function CallbackHandler() {
 
         // Redirect to dashboard
         router.push('/dashboard');
-      } catch (err) {
+      } catch (err: any) {
         console.error('OAuth Callback Error:', err);
-        router.push('/login?error=oauth_failed');
+        const errMsg = err.message || String(err);
+        router.push(`/login?error=oauth_failed&msg=${encodeURIComponent(errMsg)}`);
       }
     }
 

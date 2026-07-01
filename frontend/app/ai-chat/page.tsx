@@ -3,7 +3,7 @@
 import Sidebar from "@/components/sidebar";
 import Header from "@/components/header";
 import { Send, Bot, MessageSquare, Plus, Trash2 } from "lucide-react";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { api } from "../lib/api";
 
 // Helper function to render simple markdown formatting in chat dialogs
@@ -87,6 +87,13 @@ export default function AiChatPage() {
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(true);
   const [sending, setSending] = useState(false);
+
+  const messagesEndRef = useRef<HTMLDivElement>(null);
+
+  // Auto-scroll to bottom on new messages
+  useEffect(() => {
+    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+  }, [messages]);
 
   // Load profile and conversations list
   useEffect(() => {
@@ -254,7 +261,7 @@ export default function AiChatPage() {
         <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mt-6 rounded-3xl border border-slate-200 bg-white shadow-sm dark:border-slate-800 dark:bg-slate-900 h-[600px] overflow-hidden">
           
           {/* Left panel: Conversations List */}
-          <div className="md:col-span-1 border-r border-slate-100 dark:border-slate-800 flex flex-col h-full bg-slate-50/50 dark:bg-slate-950/20">
+          <div className="md:col-span-1 border-r border-slate-100 dark:border-slate-800 flex flex-col h-full min-h-0 bg-slate-50/50 dark:bg-slate-955/20">
             <div className="p-4 border-b border-slate-100 dark:border-slate-800">
               <button
                 onClick={handleNewChat}
@@ -297,7 +304,7 @@ export default function AiChatPage() {
           </div>
 
           {/* Right panel: Active Chat logs */}
-          <div className="md:col-span-3 flex flex-col h-full bg-white dark:bg-slate-900">
+          <div className="md:col-span-3 flex flex-col h-full min-h-0 bg-white dark:bg-slate-900">
             {/* Active Session Header */}
             <div className="flex items-center gap-3 border-b border-slate-100 p-4 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-955/20">
               <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-indigo-50 text-indigo-600 dark:bg-indigo-950/80 dark:text-indigo-400">
@@ -340,6 +347,7 @@ export default function AiChatPage() {
                   </div>
                 </div>
               ))}
+              <div ref={messagesEndRef} />
             </div>
 
             {/* Input Box */}

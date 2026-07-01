@@ -134,11 +134,15 @@ export const authRoutes = new Elysia({ prefix: '/api/auth' })
   // 8. Handle Google Callback
   .get(
     '/google/callback',
-    async ({ query }) => {
+    async ({ query, headers }) => {
       const { code } = query;
       if (!code) {
         throw new BadRequestError('Authorization code is missing');
       }
+
+      const host = headers['x-forwarded-host'] || headers['host'] || 'localhost:3000';
+      const proto = headers['x-forwarded-proto'] || 'http';
+      const frontendUrl = `${proto}://${host}`;
 
       try {
         const googleUser = await OAuthService.getGoogleUser(code);
@@ -154,7 +158,7 @@ export const authRoutes = new Elysia({ prefix: '/api/auth' })
         if (existingUser) {
           // Verify status
           if (existingUser.status === 'suspended') {
-            return Response.redirect(`${env.FRONTEND_URL}/login?error=account_suspended`, 302);
+            return Response.redirect(`${frontendUrl}/login?error=account_suspended`, 302);
           }
           
           // Login
@@ -172,10 +176,11 @@ export const authRoutes = new Elysia({ prefix: '/api/auth' })
         }
 
         // Redirect to Frontend callback page with tokens
-        return Response.redirect(`${env.FRONTEND_URL}/auth-callback?token=${userResult.accessToken}&refresh=${userResult.refreshToken}`, 302);
+        return Response.redirect(`${frontendUrl}/auth-callback?token=${userResult.accessToken}&refresh=${userResult.refreshToken}`, 302);
       } catch (err: any) {
         console.error('[Google Callback Error]', err);
-        return Response.redirect(`${env.FRONTEND_URL}/login?error=oauth_failed`, 302);
+        const errMsg = err.message || String(err);
+        return Response.redirect(`${frontendUrl}/login?error=oauth_failed&msg=${encodeURIComponent(errMsg)}`, 302);
       }
     },
     {
