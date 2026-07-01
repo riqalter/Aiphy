@@ -142,7 +142,9 @@ export const authRoutes = new Elysia({ prefix: '/api/auth' })
 
       const host = headers['x-forwarded-host'] || headers['host'] || 'localhost:3000';
       const proto = headers['x-forwarded-proto'] || 'http';
-      const frontendUrl = `${proto}://${host}`;
+      const frontendUrl = (host.includes(':4000') || host === 'api:4000')
+        ? env.FRONTEND_URL
+        : `${proto}://${host}`;
 
       try {
         const googleUser = await OAuthService.getGoogleUser(code);
